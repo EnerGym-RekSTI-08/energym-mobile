@@ -91,7 +91,7 @@ export default function WorkoutHistoryScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.nextButton}
                 onPress={() =>
-                  navigation.navigate('WorkoutDetail', {
+                  navigation.navigate('WorkoutHistoryDetail', {
                     workout: item.name,
                     date: item.date,
                     perfectForm: item.perfectForm,

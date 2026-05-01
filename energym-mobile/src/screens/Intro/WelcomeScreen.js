@@ -12,7 +12,7 @@ import {
 // Sesuaikan path ini dengan lokasi gambar kamu
 const backgroundImage = require('../../assets/images/welcome.png');
 
-export default function WelcomeScreen() {
+export default function WelcomeScreen( {navigation} ) {
   return (
     <ImageBackground 
       source={backgroundImage} 
@@ -29,7 +29,10 @@ export default function WelcomeScreen() {
             
             {/* Tombol Next */}
             <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.nextButton}>
+              <TouchableOpacity 
+                style={styles.nextButton}
+                onPress={() => navigation.navigate('signup')} // 
+              >
                 <Text style={styles.buttonText}>Next →</Text>
               </TouchableOpacity>
             </View>
@@ -82,25 +85,25 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontFamily: 'Satoshi-Medium',
   },
   welcomeText: {
     color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '500',
+    fontFamily: 'Satoshi-Medium',
+    fontSize: 36,
     marginBottom: -10, // Mengurangi jarak antara "Welcome to" dan "EnerGym"
   },
   titleText: {
     color: '#FFFFFF',
-    fontSize: 56,
-    fontWeight: '900', // Sangat tebal
+    fontFamily: 'Satoshi-Black',
+    fontSize: 64,
     letterSpacing: -1,
     marginBottom: 16,
   },
   subtitleText: {
     color: '#E0E0E0',
-    fontSize: 14,
+    fontSize: 12,
     lineHeight: 20,
     fontWeight: '400',
   },
