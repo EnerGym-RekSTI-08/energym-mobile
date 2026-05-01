@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
   ScrollView,
+  TouchableOpacity,
   TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import styles from '../../styles/globalStyles'; // Mundur ke src/styles/
 
-const PhysicalDataScreen = ({ navigation }) => {
+export default function PhysicalDataScreen({ navigation }) {
   const [physicalData, setPhysicalData] = useState({
     age: '21',
     gender: 'Male',
@@ -156,102 +156,4 @@ const PhysicalDataScreen = ({ navigation }) => {
       </TouchableOpacity>
     </ScrollView>
   );
-};
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#1C1C1E',
-        paddingBottom: 70,
-    },
-    detailHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: 50,
-        paddingBottom: 10,
-    },
-    detailHeaderTitle: {
-        color: 'white',
-        fontSize: 20,
-        fontWeight: '600',
-    },
-    physicalDataGridContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        marginTop: 20,
-    },
-    physicalDataGridItem: {
-        width: '48%',
-        backgroundColor: '#2C2C2E',
-        borderRadius: 10,
-        padding: 15,
-        marginBottom: 15,
-    },
-    physicalDataFieldHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    physicalDataFieldLabel: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-        marginLeft: 8,
-    },
-    physicalDataInputField: {
-        backgroundColor: '#1C1C1E',
-        color: 'white',
-        borderRadius: 5,
-        padding: 10,
-        fontSize: 16,
-        textAlign: 'center',
-    },
-    physicalDataFieldUnit: {
-        color: '#888',
-        textAlign: 'center',
-        marginTop: 5,
-    },
-    physicalDataRadioGroup: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginTop: 10,
-    },
-    radioOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    radioButton: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 2,
-        borderColor: '#E65100',
-        marginRight: 8,
-    },
-    radioButtonSelected: {
-        backgroundColor: '#E65100',
-    },
-    radioLabel: {
-        color: 'white',
-    },
-    physicalDataSaveButton: {
-        backgroundColor: '#E65100',
-        borderRadius: 10,
-        padding: 15,
-        marginHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 20,
-    },
-    physicalDataSaveButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-});
-
-export default PhysicalDataScreen;
+}
