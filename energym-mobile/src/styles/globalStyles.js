@@ -20,11 +20,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: 'white',
     fontSize: 24,
-    fontWeight: '600',
+    fontFamily: 'Satoshi-Bold',
   },
   detailHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 50,
@@ -32,8 +31,9 @@ const styles = StyleSheet.create({
   },
   detailHeaderTitle: {
     color: 'white',
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontFamily: 'Satoshi-Bold',
+    marginLeft: 12,
   },
 
   // Placeholders
@@ -652,12 +652,13 @@ const styles = StyleSheet.create({
   },
   profileName: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontFamily: 'Satoshi-Medium',
   },
   profileSubname: {
-    color: '#888',
+    color: '#FFFF',
     fontSize: 12,
+    fontFamily: 'Satoshi-Medium',
     marginTop: 4,
   },
   profileStatsSection: {
@@ -665,11 +666,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   profileStatsSectionTitle: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Satoshi-Medium',
     marginBottom: 12,
-    textTransform: 'uppercase',
   },
   profileStatsGrid: {
     flexDirection: 'row',
@@ -687,13 +687,14 @@ const styles = StyleSheet.create({
   },
   profileStatCount: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 26,
+    fontFamily: 'Satoshi-Bold',
     marginTop: 8,
   },
   profileStatLabel: {
-    color: '#888',
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Regular',
     marginTop: 4,
   },
   profileButtonsContainer: {
@@ -702,7 +703,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   profileActionButton: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#993D00',
     paddingVertical: 14,
     borderRadius: 8,
     flexDirection: 'row',
@@ -712,11 +713,11 @@ const styles = StyleSheet.create({
   },
   profileActionButtonText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Medium',
   },
   logoutButtonLarge: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#FF6500',
     marginHorizontal: 20,
     marginBottom: 30,
     paddingVertical: 14,
@@ -725,8 +726,8 @@ const styles = StyleSheet.create({
   },
   logoutButtonLargeText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Bold',
   },
 
   // Edit Profile
@@ -742,20 +743,20 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   editInputLabel: {
-    color: '#E65100',
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: 'Satoshi-Medium',
     marginBottom: 8,
   },
   editInput: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#993D00',
     color: 'white',
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 8,
     marginBottom: 16,
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Regular',
   },
   editSaveButton: {
     backgroundColor: '#E65100',
@@ -766,8 +767,8 @@ const styles = StyleSheet.create({
   },
   editSaveButtonText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Bold',
   },
 
   // Physical Data
@@ -792,8 +793,8 @@ const styles = StyleSheet.create({
   },
   physicalDataFieldLabel: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: 'Satoshi-Medium',
     marginLeft: 8,
   },
   physicalDataInputField: {
@@ -801,12 +802,15 @@ const styles = StyleSheet.create({
     color: 'white',
     borderRadius: 5,
     padding: 10,
-    fontSize: 16,
+    fontSize: 12,
+    fontFamily: 'Satoshi-Bold',
     textAlign: 'center',
   },
   physicalDataFieldUnit: {
-    color: '#888',
+    color: '#FFFFFF',
     textAlign: 'center',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Regular',
     marginTop: 5,
   },
   physicalDataRadioGroup: {
@@ -831,6 +835,8 @@ const styles = StyleSheet.create({
   },
   radioLabel: {
     color: 'white',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Regular',
   },
   physicalDataSaveButton: {
     backgroundColor: '#E65100',
@@ -843,8 +849,8 @@ const styles = StyleSheet.create({
   },
   physicalDataSaveButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Bold',
   },
 
   // Bottom Tab
