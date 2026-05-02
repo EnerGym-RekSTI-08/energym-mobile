@@ -9,6 +9,8 @@ import WelcomeScreen from './src/screens/Intro/WelcomeScreen.js';
 import SignUpScreen from './src/screens/Intro/SignUpScreen.js';
 import SignInScreen from './src/screens/Intro/SignInScreen.js';
 import WorkoutScreen from './src/screens/Workout/WorkoutScreen';
+import WorkoutDetailScreen from './src/screens/Workout/WorkoutDetailScreen.js';
+import ExerciseDetailScreen from './src/screens/Workout/ExerciseDetailScreen.js';
 import ScanQRScreen from './src/screens/QR/ScanQRScreen';
 import WorkoutHistoryScreen from './src/screens/History/WorkoutHistoryScreen';
 import WorkoutHistoryDetailScreen from './src/screens/History/WorkoutHistoryDetailScreen.js';
@@ -25,7 +27,8 @@ export default function App() {
     'Satoshi-Regular': require('./src/assets/fonts/Satoshi-Regular.ttf'),
     'Satoshi-Medium': require('./src/assets/fonts/Satoshi-Medium.ttf'),
     'Satoshi-Bold': require('./src/assets/fonts/Satoshi-Bold.ttf'),
-    'Satoshi-Black': require('./src/assets/fonts/Satoshi-Black.ttf'), 
+    'Satoshi-Black': require('./src/assets/fonts/Satoshi-Black.ttf'),
+    'Satoshi-Light': require('./src/assets/fonts/Satoshi-Light.ttf'),  
   });
 
   if (!fontsLoaded) {
@@ -70,6 +73,8 @@ export default function App() {
       case 'history': return <WorkoutHistoryScreen navigation={navigationObj} />;
       case 'WorkoutHistoryDetail': return <WorkoutHistoryDetailScreen route={{ params: activeParams }} navigation={navigationObj} />;
       case 'workout': return <WorkoutScreen navigation={navigationObj} />;
+      case 'WorkoutDetail': return <WorkoutDetailScreen route={{ params: activeParams }} navigation={navigationObj} />;
+      case 'ExerciseDetail': return <ExerciseDetailScreen route={{ params: activeParams }} navigation={navigationObj} />;
       case 'scan': return <ScanQRScreen />;
       case 'profile': return <ProfileScreen navigation={navigationObj} />;
       case 'EditProfile': return <EditProfileScreen navigation={navigationObj} />;
