@@ -96,7 +96,8 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                 style={styles.card}
                 onPress={() => navigation.navigate('ExerciseDetail', { 
                     exerciseId: exercise.id,
-                    workoutName: workoutName 
+                    workoutName: workoutName, 
+                    workoutId: workoutId
                 })} 
               >
                 <Image 

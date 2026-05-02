@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useFonts } from 'expo-font';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, View, Text, TouchableOpacity, Modal } from 'react-native';
+import { MaterialIcons, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 // Import Screen yang sudah dipisah
 import HomeScreen from './src/screens/Home/HomeScreen';
@@ -12,6 +12,7 @@ import WorkoutScreen from './src/screens/Workout/WorkoutScreen';
 import WorkoutDetailScreen from './src/screens/Workout/WorkoutDetailScreen.js';
 import ExerciseDetailScreen from './src/screens/Workout/ExerciseDetailScreen.js';
 import ScanQRScreen from './src/screens/QR/ScanQRScreen';
+import LiveWorkoutScreen from './src/screens/Workout/LiveWorkoutScreen.js';
 import WorkoutHistoryScreen from './src/screens/History/WorkoutHistoryScreen';
 import WorkoutHistoryDetailScreen from './src/screens/History/WorkoutHistoryDetailScreen.js';
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
@@ -23,6 +24,11 @@ import styles from './src/styles/globalStyles';
 export default function App() {
   const [currentTab, setCurrentTab] = useState('welcome');
   const [navigationStack, setNavigationStack] = useState({ home: ['welcome'] });
+  
+  // --- STATE BARU UNTUK AI WEBCAM ---
+  const [isAiConnected, setIsAiConnected] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+
   const [fontsLoaded] = useFonts({
     'Satoshi-Regular': require('./src/assets/fonts/Satoshi-Regular.ttf'),
     'Satoshi-Medium': require('./src/assets/fonts/Satoshi-Medium.ttf'),
@@ -40,9 +46,16 @@ export default function App() {
   }
 
   const navigate = (screen, params) => {
+    // Sinkronisasi tab bawah jika navigate dipanggil untuk kembali ke main tabs
+    let targetTab = currentTab;
+    if (['home', 'workout', 'scan', 'history', 'profile'].includes(screen)) {
+      setCurrentTab(screen);
+      targetTab = screen;
+    }
+
     setNavigationStack(prev => ({
       ...prev,
-      [currentTab]: [...(prev[currentTab] || [currentTab]), { screen, params }],
+      [targetTab]: [...(prev[targetTab] || [targetTab]), { screen, params }],
     }));
   };
 
@@ -58,14 +71,14 @@ export default function App() {
       ? currentScreenObj[currentScreenObj.length - 1]
       : currentTab;
 
-  // 1. KITA PINDAHKAN PENGECEKAN NAMA SCREEN KE SINI AGAR BISA DIPAKAI DI BOTTOM TAB
   const activeScreenName = typeof currentScreen === 'string' ? currentScreen : currentScreen.screen;
   const activeParams = typeof currentScreen === 'string' ? {} : currentScreen.params;
-  const navigationObj = { navigate, goBack };
+  
+  // Menambahkan setter state ke dalam navigationObj agar bisa diakses oleh layar lain
+  const navigationObj = { navigate, goBack, isAiConnected, setIsAiConnected };
 
   const renderScreen = () => {
     switch (activeScreenName) {
-      // 2. TAMBAHKAN navigation={navigationObj} AGAR BISA PINDAH DARI WELCOME KE HOME
       case 'welcome': return <WelcomeScreen navigation={navigationObj} />;
       case 'signup': return <SignUpScreen navigation={navigationObj} />;
       case 'signin': return <SignInScreen navigation={navigationObj} />;
@@ -75,7 +88,8 @@ export default function App() {
       case 'workout': return <WorkoutScreen navigation={navigationObj} />;
       case 'WorkoutDetail': return <WorkoutDetailScreen route={{ params: activeParams }} navigation={navigationObj} />;
       case 'ExerciseDetail': return <ExerciseDetailScreen route={{ params: activeParams }} navigation={navigationObj} />;
-      case 'scan': return <ScanQRScreen />;
+      case 'scan': return <ScanQRScreen navigation={navigationObj} route={{ params: activeParams }} />;
+      case 'LiveWorkout': return <LiveWorkoutScreen navigation={navigationObj} route={{ params: activeParams }} />;
       case 'profile': return <ProfileScreen navigation={navigationObj} />;
       case 'EditProfile': return <EditProfileScreen navigation={navigationObj} />;
       case 'PhysicalData': return <PhysicalDataScreen navigation={navigationObj} />;
@@ -83,12 +97,42 @@ export default function App() {
     }
   };
 
+  // Fungsi untuk memutus koneksi
+  const handleDisconnect = () => {
+    setIsAiConnected(false);
+    setShowDisconnectModal(false);
+  };
+
   return (
     <View style={styles.appContainer}>
       {renderScreen()}
 
-      {/* 3. CONDITIONAL RENDERING: JIKA SCREEN BUKAN 'welcome', BARU TAMPILKAN TAB BAWAH */}
-      {activeScreenName !== 'welcome' && activeScreenName !== 'signup' && activeScreenName !== 'signin' && (
+      {/* MODAL DISCONNECT GLOBAL */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showDisconnectModal}
+        onRequestClose={() => setShowDisconnectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <MaterialIcons name="link-off" size={60} color="#FFCEAD" style={{ marginBottom: 20 }} />
+            <Text style={styles.modalTitle}>Disconnect AI Camera?</Text>
+            <Text style={styles.modalSubtitle}>
+              Sesi pencatatan otomatis kamu akan berakhir. Kamu tetap bisa melanjutkan latihan secara manual.
+            </Text>
+            <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
+              <Text style={styles.disconnectButtonText}>Yes, Disconnect</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowDisconnectModal(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CONDITIONAL RENDERING BOTTOM TAB */}
+      {activeScreenName !== 'welcome' && activeScreenName !== 'signup' && activeScreenName !== 'signin' && activeScreenName !== 'LiveWorkout' && (
         <View style={styles.bottomTab}>
           {/* Tombol Home */}
           <TouchableOpacity
@@ -108,15 +152,33 @@ export default function App() {
             <Text style={[styles.tabLabel, currentTab === 'workout' && styles.tabLabelActive]}>Workout</Text>
           </TouchableOpacity>
 
-          {/* Tombol QR */}
+          {/* DYNAMIC SCAN QR BUTTON */}
           <TouchableOpacity
             style={[styles.tabButton, styles.scanQRButton, currentTab === 'scan' && styles.scanQRButtonActive]}
-            onPress={() => { setCurrentTab('scan'); setNavigationStack(prev => ({ ...prev, scan: ['scan'] })); }}
+            onPress={() => {
+              if (isAiConnected) {
+                // JIKA TERKONEKSI: Munculkan popup disconnect, jangan pindah halaman
+                setShowDisconnectModal(true);
+              } else {
+                // JIKA BELUM TERKONEKSI: Pindah ke halaman scan QR
+                setCurrentTab('scan'); 
+                setNavigationStack(prev => ({ ...prev, scan: ['scan'] }));
+              }
+            }}
           >
-            <View style={styles.scanQRIconContainer}>
+            <View style={[
+              styles.scanQRIconContainer, 
+              isAiConnected && { backgroundColor: '#4CAF50' } // Berubah jadi hijau jika terkoneksi
+            ]}>
               <MaterialIcons name="qr-code-2" size={32} color="white" />
             </View>
-            <Text style={[styles.scanQRLabel, currentTab === 'scan' && styles.scanQRLabelActive]}>Scan QR</Text>
+            <Text style={[
+              styles.scanQRLabel, 
+              currentTab === 'scan' && styles.scanQRLabelActive,
+              isAiConnected && { color: '#4CAF50', fontFamily: 'Satoshi-Bold' } // Teks berubah hijau
+            ]}>
+              {isAiConnected ? 'Connected' : 'Scan QR'}
+            </Text>
           </TouchableOpacity>
 
           {/* Tombol History */}

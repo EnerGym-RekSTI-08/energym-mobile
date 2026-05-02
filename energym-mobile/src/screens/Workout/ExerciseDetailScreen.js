@@ -9,7 +9,7 @@ const defaultExerciseImage = require('../../assets/images/profile picture.webp')
 
 export default function ExerciseDetailScreen({ route, navigation }) {
   // Menerima parameter dari halaman WorkoutDetail
-  const { exerciseId, workoutName } = route.params || {};
+  const { exerciseId, workoutName, workoutId } = route.params || {};
   
   const [exercise, setExercise] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,7 +121,17 @@ export default function ExerciseDetailScreen({ route, navigation }) {
         {showStartButton && (
           <TouchableOpacity 
             style={styles.startButton}
-            onPress={() => console.log('Navigate to Computer Vision Camera!')}
+            onPress={() => {
+              const paramsUntukLiveWorkout = {
+                workoutId: workoutId,   
+                exerciseId: exerciseId
+              };
+              if (navigation.isAiConnected) {
+                navigation.navigate('LiveWorkout', paramsUntukLiveWorkout);
+              } else {
+                navigation.navigate('scan', { returnTo: 'LiveWorkout', paramsUntukLiveWorkout});
+              }
+            }}
           >
             <Text style={styles.startButtonText}>Start Exercise!</Text>
           </TouchableOpacity>
