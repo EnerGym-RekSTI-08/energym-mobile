@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { useFonts } from 'expo-font';
 import { ActivityIndicator, View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
 import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import HomeScreen from './src/screens/Home/HomeScreen';
 import WelcomeScreen from './src/screens/Intro/WelcomeScreen.js';
@@ -246,8 +247,10 @@ function MainApp() {
 // Komponen Pembungkus Utama
 export default function App() {
   return (
-    <WorkoutProvider>
-      <MainApp />
-    </WorkoutProvider>
+    <SafeAreaProvider>
+      <WorkoutProvider>
+        <MainApp />
+      </WorkoutProvider>
+    </SafeAreaProvider>
   );
 }

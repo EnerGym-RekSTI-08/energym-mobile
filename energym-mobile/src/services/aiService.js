@@ -1,8 +1,15 @@
 
-const AI_EDGE_URL = 'http://192.168.1.68:8000';  // HTTP
-const AI_WS_URL   = 'ws://192.168.1.68:8000';    // WebSocket
-
+const DEFAULT_IP = '192.168.1.68';
+const DEFAULT_PORT = 8000;
 const TIMEOUT_MS = 5000;
+
+function buildHttpUrl(ip = DEFAULT_IP, port = DEFAULT_PORT) {
+  return `http://${ip}:${port}`;
+}
+
+function buildWsUrl(ip = DEFAULT_IP, port = DEFAULT_PORT) {
+  return `ws://${ip}:${port}`;
+}
 
 /**
  * Mulai sesi AI di edge PC.
@@ -14,12 +21,13 @@ const TIMEOUT_MS = 5000;
  * @param {string} [params.workoutId]  - UUID workout (opsional)
  * @returns {Promise<string>}          - session_id
  */
-export async function startAISession({ userId, stationId, exerciseId, exerciseName, workoutId }) {
+export async function startAISession({ ip = DEFAULT_IP, port = DEFAULT_PORT, userId, stationId, exerciseId, exerciseName, workoutId }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const baseUrl = buildHttpUrl(ip, port);
 
   try {
-    const response = await fetch(`${AI_EDGE_URL}/session/start`, {
+    const response = await fetch(`${baseUrl}/session/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -52,9 +60,10 @@ export async function startAISession({ userId, stationId, exerciseId, exerciseNa
  * Stop sesi AI.
  * @param {string} sessionId
  */
-export async function stopAISession(sessionId) {
+export async function stopAISession(ip = DEFAULT_IP, port = DEFAULT_PORT, sessionId) {
   try {
-    await fetch(`${AI_EDGE_URL}/session/stop`, {
+    const baseUrl = buildHttpUrl(ip, port);
+    await fetch(`${baseUrl}/session/stop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId }),
@@ -73,8 +82,9 @@ export async function stopAISession(sessionId) {
  * @param {Function} callbacks.onError        - dipanggil saat koneksi error
  * @returns {WebSocket} instance untuk bisa ditutup manual
  */
-export function connectAIWebSocket(sessionId, { onFrameUpdate, onSessionEnded, onError }) {
-  const ws = new WebSocket(`${AI_WS_URL}/ws/${sessionId}`);
+export function connectAIWebSocket(ip = DEFAULT_IP, port = DEFAULT_PORT, sessionId, { onFrameUpdate, onSessionEnded, onError }) {
+  const wsUrl = buildWsUrl(ip, port);
+  const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`);
 
   ws.onopen = () => {
     console.log('[aiService] WebSocket connected:', sessionId);
@@ -105,6 +115,8 @@ export function connectAIWebSocket(sessionId, { onFrameUpdate, onSessionEnded, o
           accuracy:   data.accuracy,
           duration:   data.duration_seconds,
         });
+      } else if (data.type === 'error') {
+        onError?.(new Error(data.message || 'AI error'));
       }
     } catch (e) {
       // Abaikan pesan non-JSON (misal pong)
