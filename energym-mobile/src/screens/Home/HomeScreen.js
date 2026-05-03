@@ -55,15 +55,29 @@ const DonutChartReps = ({ percentage, size, strokeWidth, color, backgroundColor,
 export default function HomeScreen({ navigation }) {
   const [profileData, setProfileData] = useState({ username: '', avatarUrl: null });
   const [workouts, setWorkouts] = useState([]);
+  
+  // --- STATE UNTUK RECENT ACTIVITY ---
+  const [recentActivity, setRecentActivity] = useState({
+    totalReps: 0,
+    perfectReps: 0,
+    badReps: 0,
+    repsPercentage: 0,
+    calories: 0,
+    totalMinutes: 0,
+    avgDurationPerExercise: 0,
+    hasHistory: false
+  });
+
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingWorkouts, setLoadingWorkouts] = useState(true);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+  
   const today = new Date();
-
-  const repsData = { total: 10923, perfect: 923, bad: 323, percentage: 91 };
 
   useEffect(() => {
     fetchProfile();
     fetchWorkouts();
+    fetchRecentActivity(); // Panggil fungsi fetch activity
   }, []);
 
   const fetchProfile = async () => {
@@ -90,6 +104,73 @@ export default function HomeScreen({ navigation }) {
       console.error("Error fetching profile:", error);
     } finally {
       setLoadingProfile(false);
+    }
+  };
+
+  // --- FUNGSI BARU: FETCH RECENT ACTIVITY ---
+  const fetchRecentActivity = async () => {
+    try {
+      setLoadingActivity(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Ambil 1 workout terakhir beserta detail exercise-nya
+      const { data, error } = await supabase
+        .from('workout_history')
+        .select(`
+          total_duration,
+          total_calories,
+          completed_at,
+          workout_history_exercises (
+            perfect_reps,
+            bad_reps
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      // Jika ada data riwayat
+      if (data && data.length > 0) {
+        const recentWorkout = data[0];
+        const exercises = recentWorkout.workout_history_exercises || [];
+
+        // Kalkulasi Reps
+        let perfect = 0;
+        let bad = 0;
+        exercises.forEach(ex => {
+          perfect += (ex.perfect_reps || 0);
+          bad += (ex.bad_reps || 0);
+        });
+        const total = perfect + bad;
+        const percentage = total > 0 ? Math.round((perfect / total) * 100) : 0;
+
+        // Kalkulasi Waktu & Kalori
+        const totalMins = Math.max(1, Math.round(recentWorkout.total_duration / 60));
+        const exerciseCount = exercises.length;
+        // Rata-rata waktu per exercise dalam menit (minimal 1 menit agar tidak 0 jika terlalu cepat)
+        const avgDuration = exerciseCount > 0 
+          ? Math.max(1, Math.round((recentWorkout.total_duration / exerciseCount) / 60)) 
+          : 0;
+
+        setRecentActivity({
+          totalReps: total,
+          perfectReps: perfect,
+          badReps: bad,
+          repsPercentage: percentage,
+          calories: recentWorkout.total_calories || 0,
+          totalMinutes: totalMins,
+          avgDurationPerExercise: avgDuration,
+          hasHistory: true
+        });
+      }
+      // Jika data kosong (pengguna baru), state tetap 0 sesuai inisialisasi awal
+    } catch (error) {
+      console.error("Error fetching recent activity:", error.message);
+    } finally {
+      setLoadingActivity(false);
     }
   };
 
@@ -150,7 +231,7 @@ export default function HomeScreen({ navigation }) {
     <ScrollView style={[styles.container, { backgroundColor: '#121212' }]}>
       <View style={localStyles.headerContainer}>
         {loadingProfile ? (
-          <ActivityIndicator color="#E65100" />
+          <ActivityIndicator color="#FF6500" />
         ) : (
           <Image source={profileImageSource} style={localStyles.avatar} />
         )}
@@ -177,51 +258,81 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <Text style={localStyles.sectionTitle}>Recent Activity</Text>
-      <View style={localStyles.activityContainer}>
-        <View style={localStyles.repsCard}>
-          <View style={localStyles.repsHeader}>
-            <FontAwesome5 name="dumbbell" size={16} color="#E65100" />
-            <Text style={localStyles.repsTitle}>Total Reps</Text>
-          </View>
-          <View style={localStyles.repsBody}>
-            <View>
-              <Text style={localStyles.repsCount}>{repsData.total} reps</Text>
-              <Text style={localStyles.repsSubText}>{repsData.perfect} perfect | {repsData.bad} bad</Text>
+      
+      {loadingActivity ? (
+        <ActivityIndicator color="#FF6500" style={{ marginBottom: 25 }} />
+      ) : (
+        <View style={localStyles.activityContainer}>
+          <View style={localStyles.repsCard}>
+            <View style={localStyles.repsHeader}>
+              <FontAwesome5 name="dumbbell" size={16} color="#FF6500" />
+              <Text style={localStyles.repsTitle}>Total Reps</Text>
             </View>
-            <DonutChartReps percentage={repsData.percentage} size={60} strokeWidth={6} color="#E65100" backgroundColor="#333" hideText={false} />
+            <View style={localStyles.repsBody}>
+              <View>
+                <Text style={localStyles.repsCount}>
+                  {recentActivity.hasHistory ? recentActivity.totalReps : 0} reps
+                </Text>
+                <Text style={localStyles.repsSubText}>
+                  {recentActivity.perfectReps} perfect | {recentActivity.badReps} bad
+                </Text>
+              </View>
+              <DonutChartReps 
+                percentage={recentActivity.repsPercentage} 
+                size={60} 
+                strokeWidth={6} 
+                color="#FF6500" 
+                backgroundColor="#333" 
+                hideText={false}
+              />
+            </View>
+          </View>
+
+          <View style={localStyles.rowCards}>
+            <View style={localStyles.smallCard}>
+              <View style={localStyles.smallCardHeader}>
+                <MaterialIcons name="local-fire-department" size={16} color="#FF6500" />
+                <Text style={localStyles.smallCardTitle}>Calories</Text>
+              </View>
+              <View style={localStyles.smallCardBody}>
+                <View>
+                  <Text style={localStyles.smallCardValue}>{recentActivity.calories} kcal</Text>
+                  <Text style={localStyles.smallCardSub}>{recentActivity.totalMinutes} mins</Text>
+                </View>
+                <DonutChartReps 
+                  percentage={recentActivity.hasHistory ? 100 : 0} 
+                  size={36} 
+                  strokeWidth={4} 
+                  color="#FF6500" 
+                  backgroundColor="#333" 
+                  hideText={true} 
+                />
+              </View>
+            </View>
+
+            <View style={localStyles.smallCard}>
+              <View style={localStyles.smallCardHeader}>
+                <MaterialIcons name="alarm" size={16} color="#FF6500" />
+                <Text style={localStyles.smallCardTitle}>Duration</Text>
+              </View>
+              <View style={localStyles.smallCardBody}>
+                <View>
+                  <Text style={localStyles.smallCardValue}>{recentActivity.avgDurationPerExercise} mins</Text>
+                  <Text style={localStyles.smallCardSub}>per session</Text>
+                </View>
+                <DonutChartReps 
+                  percentage={recentActivity.hasHistory ? 100 : 0} 
+                  size={36} 
+                  strokeWidth={4} 
+                  color="#FF6500" 
+                  backgroundColor="#333" 
+                  hideText={true} 
+                />
+              </View>
+            </View>
           </View>
         </View>
-
-        <View style={localStyles.rowCards}>
-          <View style={localStyles.smallCard}>
-            <View style={localStyles.smallCardHeader}>
-              <MaterialIcons name="local-fire-department" size={16} color="#E65100" />
-              <Text style={localStyles.smallCardTitle}>Calories</Text>
-            </View>
-            <View style={localStyles.smallCardBody}>
-              <View>
-                <Text style={localStyles.smallCardValue}>623 kcal</Text>
-                <Text style={localStyles.smallCardSub}>121 mins</Text>
-              </View>
-              <DonutChartReps percentage={80} size={36} strokeWidth={4} color="#E65100" backgroundColor="#333" hideText={true} />
-            </View>
-          </View>
-
-          <View style={localStyles.smallCard}>
-            <View style={localStyles.smallCardHeader}>
-              <MaterialIcons name="alarm" size={16} color="#E65100" />
-              <Text style={localStyles.smallCardTitle}>Duration</Text>
-            </View>
-            <View style={localStyles.smallCardBody}>
-              <View>
-                <Text style={localStyles.smallCardValue}>43 mins</Text>
-                <Text style={localStyles.smallCardSub}>Session</Text>
-              </View>
-              <DonutChartReps percentage={60} size={36} strokeWidth={4} color="#E65100" backgroundColor="#333" hideText={true} />
-            </View>
-          </View>
-        </View>
-      </View>
+      )}
 
       <Text style={localStyles.sectionTitle}>Trending Workout</Text>
       {loadingWorkouts ? (
@@ -242,8 +353,6 @@ export default function HomeScreen({ navigation }) {
                 style={localStyles.workoutImage} 
               />
               <View style={localStyles.workoutOverlay}>
-                
-                {/* --- BAGIAN HEADER CARD YANG BARU --- */}
                 <View style={localStyles.topHeader}>
                   <View style={localStyles.typeContainer}>
                     <FontAwesome5 name="running" size={12} color="#FF6500" />
@@ -254,7 +363,6 @@ export default function HomeScreen({ navigation }) {
                     <Text style={localStyles.exerciseBadgeText}>{workout.number_of_exercises} Exercises</Text>
                   </View>
                 </View>
-                {/* ---------------------------------- */}
 
                 <View style={localStyles.workoutTextContainer}>
                   <Text style={localStyles.workoutName}>{workout.name}</Text>
@@ -280,7 +388,7 @@ const localStyles = StyleSheet.create({
   
   dateStripContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 20 },
   dateBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10 },
-  activeDateBox: { backgroundColor: '#E65100' },
+  activeDateBox: { backgroundColor: '#FF6500' },
   dayText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Satoshi-Light', marginBottom: 4 },
   dateText: { color: 'white', fontSize: 12, fontFamily: 'Satoshi-Light' },
   activeDateText: { color: 'white' },
@@ -307,7 +415,6 @@ const localStyles = StyleSheet.create({
   workoutCard: { width: '48%', height: 200, borderRadius: 15, marginBottom: 15, overflow: 'hidden', backgroundColor: '#1E1E1E' },
   workoutImage: { width: '100%', height: '100%', position: 'absolute' },
   
-  // --- STYLE UNTUK CARD OVERLAY DIPERBARUI ---
   workoutOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 12, justifyContent: 'space-between' },
   topHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   typeContainer: { flexDirection: 'row', alignItems: 'center' },
@@ -317,5 +424,4 @@ const localStyles = StyleSheet.create({
   workoutTextContainer: { marginTop: 'auto' },
   workoutName: { color: '#FF6500', fontSize: 14, fontFamily: 'Satoshi-Medium', marginBottom: 4 },
   workoutDesc: { color: '#C6C3C3', fontSize: 10, fontFamily: 'Satoshi-Regular' },
-  // ---------------------------------------------
 });

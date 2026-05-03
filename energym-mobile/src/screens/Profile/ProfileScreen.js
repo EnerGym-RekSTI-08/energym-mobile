@@ -13,15 +13,22 @@ export default function ProfileScreen({ navigation }) {
     weight: '',
     avatarUrl: null, 
   });
+  
+  // State baru untuk menyimpan statistik kumulatif
+  const [stats, setStats] = useState({
+    totalExercises: 0,
+    perfectPercentage: 0,
+    formattedCalories: '0'
+  });
+
   const [loading, setLoading] = useState(true);
 
-  // KEMBALI MENGGUNAKAN useEffect BUKAN useFocusEffect
-  // Karena sistem navigasi App.js kamu me-render ulang komponen saat tab berubah atau goBack() dipanggil.
   useEffect(() => {
-    fetchUserData();
+    // Memanggil kedua fungsi secara bersamaan
+    fetchUserDataAndStats();
   }, []);
 
-  const fetchUserData = async () => {
+  const fetchUserDataAndStats = async () => {
     try {
       setLoading(true);
       
@@ -33,28 +40,87 @@ export default function ProfileScreen({ navigation }) {
         return;
       }
 
-      const { data, error } = await supabase
+      // 1. AMBIL DATA PROFIL
+      const profilePromise = supabase
         .from('profiles')
         .select('username, height, weight, avatar_url')
         .eq('id', user.id)
         .single(); 
 
-      if (error) {
-        console.error("Error fetching profile:", error);
-      } else if (data) {
+      // 2. AMBIL DATA STATISTIK WORKOUT (Relasi tabel)
+      const statsPromise = supabase
+        .from('workout_history')
+        .select(`
+          total_calories,
+          workout_history_exercises (
+            perfect_reps,
+            bad_reps
+          )
+        `)
+        .eq('user_id', user.id);
+
+      // Tunggu kedua data selesai diambil
+      const [profileResponse, statsResponse] = await Promise.all([profilePromise, statsPromise]);
+
+      // --- PROSES DATA PROFIL ---
+      if (profileResponse.data) {
         let publicAvatarUrl = null;
-        if (data.avatar_url) {
-          const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(data.avatar_url);
+        if (profileResponse.data.avatar_url) {
+          const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(profileResponse.data.avatar_url);
           publicAvatarUrl = publicUrl;
         }
 
         setProfileData({
-          username: data.username,
-          height: data.height,
-          weight: data.weight,
+          username: profileResponse.data.username,
+          height: profileResponse.data.height,
+          weight: profileResponse.data.weight,
           avatarUrl: publicAvatarUrl,
         });
       }
+
+      // --- PROSES DATA STATISTIK ---
+      if (statsResponse.data && statsResponse.data.length > 0) {
+        let totalExercisesCount = 0;
+        let totalCaloriesCount = 0;
+        let totalPerfectReps = 0;
+        let totalBadReps = 0;
+
+        statsResponse.data.forEach(workout => {
+          // Tambahkan total kalori
+          totalCaloriesCount += (workout.total_calories || 0);
+          
+          const exercises = workout.workout_history_exercises || [];
+          // Tambahkan jumlah exercise
+          totalExercisesCount += exercises.length;
+
+          // Tambahkan reps untuk kalkulasi persentase
+          exercises.forEach(ex => {
+            totalPerfectReps += (ex.perfect_reps || 0);
+            totalBadReps += (ex.bad_reps || 0);
+          });
+        });
+
+        // Kalkulasi Persentase
+        const totalReps = totalPerfectReps + totalBadReps;
+        // Gunakan toFixed(1) agar hanya ada 1 angka di belakang koma (misal: 57.7)
+        const perfectPercentage = totalReps > 0 
+          ? ((totalPerfectReps / totalReps) * 100).toFixed(1) 
+          : 0;
+
+        // Format Kalori (Ubah ke k jika lebih dari 1000)
+        let formattedKcal = totalCaloriesCount.toString();
+        if (totalCaloriesCount >= 1000) {
+          // Jika 1200 jadi 1.2k. Jika 1000 jadi 1.0k
+          formattedKcal = (totalCaloriesCount / 1000).toFixed(1) + 'k';
+        }
+
+        setStats({
+          totalExercises: totalExercisesCount,
+          perfectPercentage: perfectPercentage,
+          formattedCalories: formattedKcal
+        });
+      }
+
     } catch (error) {
       console.error("Unexpected error:", error);
     } finally {
@@ -67,7 +133,6 @@ export default function ProfileScreen({ navigation }) {
     if (error) {
       Alert.alert("Logout Error", error.message);
     } else {
-      // Karena pakai custom navigation, pastikan 'welcome' terdaftar di switch App.js
       navigation.navigate('welcome'); 
     }
   };
@@ -76,7 +141,6 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      {/* ... KODE UI SISANYA TETAP SAMA SEPERTI SEBELUMNYA ... */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Manage Profile</Text>
       </View>
@@ -98,23 +162,28 @@ export default function ProfileScreen({ navigation }) {
 
       <View style={styles.profileStatsSection}>
         <Text style={styles.profileStatsSectionTitle}>Your Statistics</Text>
-        <View style={styles.profileStatsGrid}>
-          <View style={styles.profileStatBox}>
-            <MaterialIcons name="work" size={24} color="#E65100" />
-            <Text style={styles.profileStatCount}>12</Text>
-            <Text style={styles.profileStatLabel}>sessions</Text>
+        {loading ? (
+          <ActivityIndicator size="small" color="#E65100" style={{ marginTop: 20 }} />
+        ) : (
+          <View style={styles.profileStatsGrid}>
+            <View style={styles.profileStatBox}>
+              <MaterialIcons name="work" size={24} color="#E65100" />
+              <Text style={styles.profileStatCount}>{stats.totalExercises}</Text>
+              {/* Label saya ubah ke exercises karena menghitung total exercise */}
+              <Text style={styles.profileStatLabel}>exercises</Text> 
+            </View>
+            <View style={styles.profileStatBox}>
+              <MaterialIcons name="trending-up" size={24} color="#E65100" />
+              <Text style={styles.profileStatCount}>{stats.perfectPercentage}</Text>
+              <Text style={styles.profileStatLabel}>%</Text>
+            </View>
+            <View style={styles.profileStatBox}>
+              <MaterialIcons name="local-fire-department" size={24} color="#E65100" />
+              <Text style={styles.profileStatCount}>{stats.formattedCalories}</Text>
+              <Text style={styles.profileStatLabel}>kcal</Text>
+            </View>
           </View>
-          <View style={styles.profileStatBox}>
-            <MaterialIcons name="trending-up" size={24} color="#E65100" />
-            <Text style={styles.profileStatCount}>57.72</Text>
-            <Text style={styles.profileStatLabel}>%</Text>
-          </View>
-          <View style={styles.profileStatBox}>
-            <MaterialIcons name="local-fire-department" size={24} color="#E65100" />
-            <Text style={styles.profileStatCount}>1.2k</Text>
-            <Text style={styles.profileStatLabel}>kcal</Text>
-          </View>
-        </View>
+        )}
       </View>
 
       <View style={styles.profileButtonsContainer}>

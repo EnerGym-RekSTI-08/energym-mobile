@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Satoshi-Regular',
   },
   editSaveButton: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#FF6500',
     paddingVertical: 14,
     borderRadius: 8,
     marginTop: 10,
@@ -827,11 +827,11 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#E65100',
+    borderColor: '#FF6500',
     marginRight: 8,
   },
   radioButtonSelected: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#FF6500',
   },
   radioLabel: {
     color: 'white',
@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Satoshi-Regular',
   },
   physicalDataSaveButton: {
-    backgroundColor: '#E65100',
+    backgroundColor: '#FF6500',
     borderRadius: 10,
     padding: 15,
     marginHorizontal: 20,
@@ -876,7 +876,7 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderTopWidth: 3,
-    borderTopColor: '#E65100',
+    borderTopColor: '#FF6500',
   },
   tabLabel: {
     color: '#888',
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tabLabelActive: {
-    color: '#E65100',
+    color: '#FF6500',
   },
 
   // Scan QR Button
@@ -897,7 +897,7 @@ const styles = StyleSheet.create({
   scanQRIconContainer: {
     width: 50,
     height: 50,
-    backgroundColor: '#E65100',
+    backgroundColor: '#FF6500',
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
@@ -909,7 +909,58 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   scanQRLabelActive: {
-    color: '#E65100',
+    color: '#FF6500',
+  },
+// --- MODAL DISCONNECT STYLES ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+  },
+  modalContent: {
+    backgroundColor: '#FF6500', // Warna gelap agar kontras
+    borderRadius: 30,
+    padding: 30,
+    alignItems: 'center',
+    width: '100%',
+  },
+  modalTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontFamily: 'Satoshi-Bold',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  modalSubtitle: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Satoshi-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 30,
+  },
+  disconnectButton: {
+    backgroundColor: '#3B3838', 
+    width: '100%',
+    paddingVertical: 15,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  disconnectButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontFamily: 'Satoshi-Bold',
+  },
+  cancelButton: {
+    paddingVertical: 10,
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Satoshi-Bold',
   },
 });
 
