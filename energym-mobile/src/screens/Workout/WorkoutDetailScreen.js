@@ -139,7 +139,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
       {/* LIST OF EXERCISES */}
       {loading ? (
-        <ActivityIndicator size="large" color="#E65100" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color="#FF6500" style={{ marginTop: 50 }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           {exercises.length === 0 ? (
@@ -178,7 +178,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                   {done ? (
                     <MaterialCommunityIcons name="check-circle" size={28} color="#4CAF50" />
                   ) : (
-                    <MaterialIcons name="chevron-right" size={28} color="#E65100" />
+                    <MaterialIcons name="chevron-right" size={28} color="#FF6500" />
                   )}
                 </TouchableOpacity>
               );

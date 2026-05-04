@@ -149,7 +149,7 @@ export default function ProfileScreen({ navigation }) {
         <Image source={imageSource} style={styles.profileImage} />
         
         {loading ? (
-          <ActivityIndicator size="small" color="#E65100" style={{ marginTop: 10 }} />
+          <ActivityIndicator size="small" color="#FF6500" style={{ marginTop: 10 }} />
         ) : (
           <>
             <Text style={styles.profileName}>{profileData.username || 'User'}</Text>
@@ -163,22 +163,22 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.profileStatsSection}>
         <Text style={styles.profileStatsSectionTitle}>Your Statistics</Text>
         {loading ? (
-          <ActivityIndicator size="small" color="#E65100" style={{ marginTop: 20 }} />
+          <ActivityIndicator size="small" color="#FF6500" style={{ marginTop: 20 }} />
         ) : (
           <View style={styles.profileStatsGrid}>
             <View style={styles.profileStatBox}>
-              <MaterialIcons name="work" size={24} color="#E65100" />
+              <MaterialIcons name="work" size={24} color="#FF6500" />
               <Text style={styles.profileStatCount}>{stats.totalExercises}</Text>
               {/* Label saya ubah ke exercises karena menghitung total exercise */}
               <Text style={styles.profileStatLabel}>exercises</Text> 
             </View>
             <View style={styles.profileStatBox}>
-              <MaterialIcons name="trending-up" size={24} color="#E65100" />
+              <MaterialIcons name="trending-up" size={24} color="#FF6500" />
               <Text style={styles.profileStatCount}>{stats.perfectPercentage}</Text>
               <Text style={styles.profileStatLabel}>%</Text>
             </View>
             <View style={styles.profileStatBox}>
-              <MaterialIcons name="local-fire-department" size={24} color="#E65100" />
+              <MaterialIcons name="local-fire-department" size={24} color="#FF6500" />
               <Text style={styles.profileStatCount}>{stats.formattedCalories}</Text>
               <Text style={styles.profileStatLabel}>kcal</Text>
             </View>

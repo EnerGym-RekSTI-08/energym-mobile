@@ -120,7 +120,7 @@ export default function PhysicalDataScreen({ navigation }) {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#E65100" />
+        <ActivityIndicator size="large" color="#FF6500" />
       </View>
     );
   }
@@ -139,7 +139,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Age */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="cake" size={20} color="#E65100" />
+            <MaterialIcons name="cake" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Age</Text>
           </View>
           <TextInput
@@ -156,7 +156,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Gender */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="wc" size={20} color="#E65100" />
+            <MaterialIcons name="wc" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Gender</Text>
           </View>
           <View style={styles.physicalDataRadioGroup}>
@@ -180,7 +180,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Height */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="straighten" size={20} color="#E65100" />
+            <MaterialIcons name="straighten" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Height</Text>
           </View>
           <TextInput
@@ -197,7 +197,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Weight */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="scale" size={20} color="#E65100" />
+            <MaterialIcons name="scale" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Weight</Text>
           </View>
           <TextInput
@@ -214,7 +214,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Dominant Hand */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="pan-tool" size={20} color="#E65100" />
+            <MaterialIcons name="pan-tool" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Dominant Hand</Text>
           </View>
           <View style={styles.physicalDataRadioGroup}>
@@ -238,7 +238,7 @@ export default function PhysicalDataScreen({ navigation }) {
         {/* Injury History */}
         <View style={styles.physicalDataGridItem}>
           <View style={styles.physicalDataFieldHeader}>
-            <MaterialIcons name="local-hospital" size={20} color="#E65100" />
+            <MaterialIcons name="local-hospital" size={20} color="#FF6500" />
             <Text style={styles.physicalDataFieldLabel}>Injury History</Text>
           </View>
           <View style={styles.physicalDataRadioGroup}>
