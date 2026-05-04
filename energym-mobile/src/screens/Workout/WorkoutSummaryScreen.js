@@ -180,11 +180,11 @@ export default function WorkoutSummaryScreen({ route, navigation }) {
                 <Text style={styles.exerciseSets}>{ex.sets} Sets {ex.reps} Reps</Text>
                 <View style={styles.exerciseBadgesRow}>
                   <View style={styles.smallBadgePerfect}>
-                    <MaterialCommunityIcons name="check-circle-outline" size={12} color="#AAA" />
+                    <MaterialCommunityIcons name="check-circle-outline" size={12} color="#FF6500" />
                     <Text style={styles.smallBadgeText}>Perfect Form: {ex.perfectReps || 0}</Text>
                   </View>
                   <View style={styles.smallBadgeBad}>
-                    <MaterialCommunityIcons name="close-circle-outline" size={12} color="#AAA" />
+                    <MaterialCommunityIcons name="close-circle-outline" size={12} color="#FF6500" />
                     <Text style={styles.smallBadgeText}>Bad Form: {ex.badReps || 0}</Text>
                   </View>
                 </View>
@@ -257,7 +257,7 @@ export default function WorkoutSummaryScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#222222' },
-  scrollContainer: { paddingHorizontal: 20, paddingTop: 60 },
+  scrollContainer: { paddingHorizontal: 20, paddingTop: 50 },
   headerTitle: { color: 'white', fontSize: 24, fontFamily: 'Satoshi-Bold' },
   dateSubtitle: { color: 'white', fontSize: 10, fontFamily: 'Satoshi-Regular', marginTop: 5, marginBottom: 30 },
   topMetricsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30 },

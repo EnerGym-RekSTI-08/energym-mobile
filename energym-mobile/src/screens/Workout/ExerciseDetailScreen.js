@@ -166,7 +166,7 @@ export default function ExerciseDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#222222' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingHorizontal: 20, paddingBottom: 20 },
   backButton: { paddingRight: 10 },
   headerTitle: { color: 'white', fontSize: 24, fontFamily: 'Satoshi-Bold' },
   scrollContainer: { paddingHorizontal: 20 },

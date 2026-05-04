@@ -90,7 +90,8 @@ export default function WorkoutDetailScreen({ route, navigation }) {
         // Langsung pindah ke halaman Summary tanpa popup
         navigation.navigate('WorkoutSummary', { 
           workoutName: workoutName,
-          summaryData: summaryData 
+          summaryData: summaryData,
+          workoutId: workoutId 
         });
       }, 500);
     }
@@ -193,7 +194,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1E1E1E' },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20,
+    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingHorizontal: 20, paddingBottom: 20,
   },
   backButton: { paddingRight: 10, paddingVertical: 5 },
   headerTitle: { color: 'white', fontSize: 24, fontFamily: 'Satoshi-Bold' },
