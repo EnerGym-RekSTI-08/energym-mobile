@@ -732,11 +732,32 @@ const styles = StyleSheet.create({
 
   // Edit Profile
   editProfileImageLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 125,
+    height: 125,
+    borderRadius: 70,
     alignSelf: 'center',
     marginVertical: 24,
+  },
+  editProfileImageWrapper: {
+    position: 'relative', 
+    alignSelf: 'center', 
+    marginTop: 20, 
+  },
+  editProfileImageOverlay: {
+    position: 'absolute', 
+    bottom: 10, 
+    right: 10, 
+    backgroundColor: '#993D00', 
+    width: 40,
+    height: 40,
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    elevation: 5, 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   editFormContainer: {
     paddingHorizontal: 20,

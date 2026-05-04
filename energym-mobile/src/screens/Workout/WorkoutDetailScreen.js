@@ -90,7 +90,8 @@ export default function WorkoutDetailScreen({ route, navigation }) {
         // Langsung pindah ke halaman Summary tanpa popup
         navigation.navigate('WorkoutSummary', { 
           workoutName: workoutName,
-          summaryData: summaryData 
+          summaryData: summaryData,
+          workoutId: workoutId 
         });
       }, 500);
     }
@@ -138,7 +139,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
       {/* LIST OF EXERCISES */}
       {loading ? (
-        <ActivityIndicator size="large" color="#E65100" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color="#FF6500" style={{ marginTop: 50 }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           {exercises.length === 0 ? (
@@ -177,7 +178,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                   {done ? (
                     <MaterialCommunityIcons name="check-circle" size={28} color="#4CAF50" />
                   ) : (
-                    <MaterialIcons name="chevron-right" size={28} color="#E65100" />
+                    <MaterialIcons name="chevron-right" size={28} color="#FF6500" />
                   )}
                 </TouchableOpacity>
               );
@@ -193,7 +194,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1E1E1E' },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20,
+    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingHorizontal: 20, paddingBottom: 20,
   },
   backButton: { paddingRight: 10, paddingVertical: 5 },
   headerTitle: { color: 'white', fontSize: 24, fontFamily: 'Satoshi-Bold' },

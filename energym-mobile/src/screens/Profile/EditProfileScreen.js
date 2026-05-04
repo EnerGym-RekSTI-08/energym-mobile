@@ -159,7 +159,7 @@ export default function EditProfileScreen({ navigation }) {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#E65100" />
+        <ActivityIndicator size="large" color="#FF6500" />
       </View>
     );
   }
