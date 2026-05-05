@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   ActivityIndicator, Alert, Dimensions, Image
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { supabase } from '../../services/supabase';
@@ -13,9 +13,11 @@ import {
   stopAISession,
   connectAIWebSocket,
   checkAIHealth,
+  warmupAICamera,
 } from '../../services/aiService';
 
 const { width } = Dimensions.get('window');
+const REST_DURATION_SEC = 30; // Durasi istirahat antar set (detik)
 
 export default function LiveWorkoutScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -27,10 +29,13 @@ export default function LiveWorkoutScreen({ navigation, route }) {
 
   const { addCompletedExercise } = useContext(WorkoutContext);
 
-  // Snapshot polling
-  const [frameUri, setFrameUri] = useState(null);
-  const [frameKey, setFrameKey] = useState(0);
+  // Double-buffer snapshot (menghindari blinking)
+  const [bufferA, setBufferA] = useState(null);
+  const [bufferB, setBufferB] = useState(null);
+  const [activeBuffer, setActiveBuffer] = useState('A');
+  const activeBufferRef = useRef('A');
   const pollingRef = useRef(null);
+  const loadingRef = useRef(false);
 
   // State umum
   const [loading, setLoading]             = useState(true);
@@ -50,6 +55,15 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const badFormTimeout = useRef(null);
   const [sessionStarted, setSessionStarted] = useState(false);
 
+  // State untuk set/rest management
+  const [isResting, setIsResting]         = useState(false);
+  const [restSeconds, setRestSeconds]     = useState(0);
+  const [showSetCompleteModal, setShowSetCompleteModal] = useState(false);
+  const [allSetsComplete, setAllSetsComplete] = useState(false);
+  const repOffsetRef = useRef(0);
+  const totalPerfectRef = useRef(0);
+  const totalBadRef = useRef(0);
+
   // State AI
   const [aiSessionId, setAiSessionId]   = useState(null);
   const [aiConnected, setAiConnected]   = useState(false);
@@ -58,6 +72,23 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const wsRef        = useRef(null);
   const aiSummaryRef = useRef(null);
   const stoppedRef   = useRef(false);
+
+  // Refs untuk akses state terkini di callback
+  const targetRepsRef = useRef(0);
+  const targetSetsRef = useRef(0);
+  const currentSetRef = useRef(1);
+  const isRestingRef  = useRef(false);
+
+  // Sync refs
+  useEffect(() => { targetRepsRef.current = targetReps; }, [targetReps]);
+  useEffect(() => { targetSetsRef.current = targetSets; }, [targetSets]);
+  useEffect(() => { currentSetRef.current = currentSet; }, [currentSet]);
+  useEffect(() => { isRestingRef.current = isResting; }, [isResting]);
+
+  // Pre-warm kamera saat masuk screen (sebelum user tekan Start)
+  useEffect(() => {
+    warmupAICamera(aiIp, aiPort);
+  }, []);
 
   // Fetch data latihan
   useEffect(() => {
@@ -87,14 +118,35 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     fetchExerciseData();
   }, [workoutId, exerciseId]);
 
-  // Timer
+  // Timer utama (workout)
   useEffect(() => {
     let interval;
-    if (isActive) interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    if (isActive && !isResting) interval = setInterval(() => setSeconds(s => s + 1), 1000);
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, [isActive, isResting]);
 
-  // Cleanup saat unmount — TIDAK panggil stop lagi
+  // Timer istirahat antar set
+  useEffect(() => {
+    let interval;
+    if (isResting) {
+      interval = setInterval(() => {
+        setRestSeconds(prev => {
+          if (prev <= 1) {
+            // Rest selesai → mulai set berikutnya
+            clearInterval(interval);
+            setIsResting(false);
+            setShowSetCompleteModal(false);
+            setPoseStatus('Set baru dimulai!');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isResting]);
+
+  // Cleanup saat unmount
   useEffect(() => {
     return () => {
       clearInterval(pollingRef.current);
@@ -102,13 +154,58 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     };
   }, []);
 
+  // ===== Set Completion Handler =====
+  const handleSetComplete = useCallback((repCountFromAI) => {
+    // Simpan offset untuk set berikutnya
+    repOffsetRef.current = repCountFromAI;
+
+    const setNum = currentSetRef.current;
+    const totalSetsTarget = targetSetsRef.current;
+
+    if (setNum >= totalSetsTarget) {
+      // Semua set selesai!
+      setAllSetsComplete(true);
+      setShowSetCompleteModal(true);
+      setPoseStatus('Semua set selesai!');
+    } else {
+      // Masih ada set berikutnya → mulai rest
+      setCurrentSet(prev => prev + 1);
+      setCurrentReps(0);
+      setIsResting(true);
+      setRestSeconds(REST_DURATION_SEC);
+      setShowSetCompleteModal(true);
+      setPoseStatus('Istirahat...');
+    }
+  }, []);
+
   const startSnapshotPolling = (ip, port) => {
     clearInterval(pollingRef.current);
     pollingRef.current = setInterval(() => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
       const ts = Date.now();
-      setFrameUri(`http://${ip}:${port}/stream/snapshot?t=${ts}`);
-      setFrameKey(ts);  // key berubah → Image re-mount → tidak cache
-    }, 200);
+      const newUri = `http://${ip}:${port}/stream/snapshot?t=${ts}`;
+
+      if (activeBufferRef.current === 'A') {
+        setBufferB(newUri);
+      } else {
+        setBufferA(newUri);
+      }
+    }, 250);
+  };
+
+  const handleBackBufferLoaded = () => {
+    loadingRef.current = false;
+    setActiveBuffer(prev => {
+      const next = prev === 'A' ? 'B' : 'A';
+      activeBufferRef.current = next;
+      return next;
+    });
+  };
+
+  const handleBufferError = () => {
+    loadingRef.current = false;
   };
 
   const handleStart = async () => {
@@ -142,31 +239,48 @@ export default function LiveWorkoutScreen({ navigation, route }) {
       });
       setAiSessionId(sessionId);
 
-      // Mulai snapshot polling langsung
       startSnapshotPolling(aiIp, aiPort);
-
-      // Tunggu pipeline server siap
       await new Promise(r => setTimeout(r, 500));
 
-      // Sambungkan WebSocket untuk data real-time
       const ws = connectAIWebSocket(aiIp, aiPort, sessionId, {
-        onFrameUpdate: ({ repCount, state, isBadForm, formIssues }) => {
-          setCurrentReps(repCount);
-          setPoseStatus(`${state} | reps: ${repCount}`);
+        onFrameUpdate: ({ repCount, state, isBadForm, formIssues, activeArm }) => {
+          // Hitung rep relatif terhadap set saat ini
+          const repsInSet = repCount - repOffsetRef.current;
+
+          // Jangan update saat sedang istirahat
+          if (isRestingRef.current) return;
+
+          setCurrentReps(repsInSet);
+          const armLabel = activeArm && activeArm !== 'none' ? ` (${activeArm})` : '';
+          setPoseStatus(`${state}${armLabel} | reps: ${repsInSet}`);
 
           if (isBadForm && formIssues.length > 0) {
             const issueMap = {
-              body_sway:   '⚠ Jangan ayun badan!',
-              elbow_drift: '⚠ Siku jangan maju!',
-              too_fast:    '⚠ Perlambat gerakan!',
+              body_sway:     '⚠ Jangan ayun badan!',
+              elbow_drift:   '⚠ Siku jangan maju!',
+              too_fast:      '⚠ Perlambat gerakan!',
+              grip_rotation: '⚠ Jaga posisi grip netral!',
             };
             const code = formIssues[0].split('_').slice(0, 2).join('_');
             setBadFormMessage(issueMap[code] ?? '⚠ Bad Form!');
-            setBadCount(c => c + 1);
+            totalBadRef.current += 1;
+            setBadCount(totalBadRef.current);
             clearTimeout(badFormTimeout.current);
             badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 2500);
           } else {
-            setPerfectCount(prev => repCount > prev ? repCount : prev);
+            // Update perfect count (cek apakah rep baru terhitung)
+            const prevPerfect = totalPerfectRef.current;
+            const newPerfect = repCount - totalBadRef.current;
+            if (newPerfect > prevPerfect) {
+              totalPerfectRef.current = newPerfect;
+              setPerfectCount(newPerfect);
+            }
+          }
+
+          // Cek apakah set selesai
+          const target = targetRepsRef.current;
+          if (target > 0 && repsInSet >= target) {
+            handleSetComplete(repCount);
           }
         },
         onSessionEnded: (summary) => {
@@ -191,20 +305,23 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   };
 
   const handlePauseToggle = () => {
-    if (!sessionStarted) return;
+    if (!sessionStarted || isResting) return;
     setIsActive(prev => !prev);
   };
 
   const handleStop = async () => {
-    if (stoppedRef.current) return;  // cegah double-stop
+    if (stoppedRef.current) return;
     stoppedRef.current = true;
 
     setIsActive(false);
     setSessionStarted(false);
     setShowStopModal(false);
+    setIsResting(false);
+    setShowSetCompleteModal(false);
 
     clearInterval(pollingRef.current);
-    setFrameUri(null);
+    setBufferA(null);
+    setBufferB(null);
     wsRef.current?.close();
 
     if (aiSessionId) {
@@ -229,6 +346,13 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     });
   };
 
+  const handleSkipRest = () => {
+    setIsResting(false);
+    setRestSeconds(0);
+    setShowSetCompleteModal(false);
+    setPoseStatus('Set baru dimulai!');
+  };
+
   if (loading) {
     return <View style={styles.container}><ActivityIndicator size="large" color="#FF6500" /></View>;
   }
@@ -237,22 +361,46 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const ss_str = String(seconds % 60).padStart(2, '0');
   const isPaused = sessionStarted && !isActive;
 
+  // Format rest timer
+  const restMM = String(Math.floor(restSeconds / 60)).padStart(2, '0');
+  const restSS = String(restSeconds % 60).padStart(2, '0');
+  const repsPerSet = targetReps;
+
   return (
     <View style={styles.container}>
 
       {/* Webcam preview */}
       <View style={styles.streamContainer}>
-        {frameUri ? (
-          <Image
-            key={frameKey}
-            source={{ uri: frameUri }}
-            style={styles.stream}
-            resizeMode="cover"
-            fadeDuration={0}
-          />
+        {(bufferA || bufferB) ? (
+          <View style={styles.stream}>
+            {/* Buffer A */}
+            <Image
+              source={bufferA ? { uri: bufferA } : undefined}
+              style={[
+                styles.streamImage,
+                { opacity: activeBuffer === 'A' ? 1 : 0 },
+              ]}
+              resizeMode="cover"
+              fadeDuration={0}
+              onLoad={activeBuffer !== 'A' ? handleBackBufferLoaded : undefined}
+              onError={activeBuffer !== 'A' ? handleBufferError : undefined}
+            />
+            {/* Buffer B */}
+            <Image
+              source={bufferB ? { uri: bufferB } : undefined}
+              style={[
+                styles.streamImage,
+                { opacity: activeBuffer === 'B' ? 1 : 0 },
+              ]}
+              resizeMode="cover"
+              fadeDuration={0}
+              onLoad={activeBuffer !== 'B' ? handleBackBufferLoaded : undefined}
+              onError={activeBuffer !== 'B' ? handleBufferError : undefined}
+            />
+          </View>
         ) : (
           <View style={styles.streamPlaceholder}>
-            <Text style={styles.placeholderIcon}>📷</Text>
+            <MaterialIcons name="videocam-off" size={56} color="#555" style={{ marginBottom: 12 }} />
             <Text style={styles.placeholderText}>Webcam belum aktif</Text>
             <Text style={styles.placeholderSub}>Tekan Start untuk mulai</Text>
           </View>
@@ -265,10 +413,26 @@ export default function LiveWorkoutScreen({ navigation, route }) {
           <Text style={styles.timerText}>• {mm}:{ss_str}</Text>
         </View>
 
+        {/* Rest overlay */}
+        {isResting && (
+          <View style={styles.restOverlay}>
+            <MaterialCommunityIcons name="timer-sand" size={52} color="#FF6A00" style={{ marginBottom: 12 }} />
+            <Text style={styles.restTitle}>Istirahat</Text>
+            <Text style={styles.restTimer}>{restMM}:{restSS}</Text>
+            <Text style={styles.restSubtitle}>Set berikutnya segera dimulai</Text>
+            <TouchableOpacity style={styles.skipRestButton} onPress={handleSkipRest}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.skipRestText}>Lewati</Text>
+                <MaterialIcons name="skip-next" size={20} color="#FFF" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Status center */}
-        {isActive && (
+        {isActive && !isResting && (
           <View style={styles.centerStatus}>
-            <Text style={styles.centerStatusIcon}>🔍</Text>
+            <MaterialIcons name="visibility" size={18} color="#79E35F" />
             <Text style={styles.centerStatusText}>{poseStatus}</Text>
           </View>
         )}
@@ -289,8 +453,8 @@ export default function LiveWorkoutScreen({ navigation, route }) {
           <Text style={styles.statValue}>{currentSet}/{targetSets}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Total Reps</Text>
-          <Text style={styles.statValue}>{targetReps}</Text>
+          <Text style={styles.statLabel}>Target Reps</Text>
+          <Text style={styles.statValue}>{repsPerSet}</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Reps</Text>
@@ -306,7 +470,11 @@ export default function LiveWorkoutScreen({ navigation, route }) {
           </TouchableOpacity>
         ) : (
           <View style={styles.controlsBar}>
-            <TouchableOpacity style={styles.pauseButton} onPress={handlePauseToggle}>
+            <TouchableOpacity
+              style={[styles.pauseButton, isResting && { opacity: 0.5 }]}
+              onPress={handlePauseToggle}
+              disabled={isResting}
+            >
               <MaterialIcons name={isPaused ? 'play-arrow' : 'pause'} size={22} color="#FFF" />
               <Text style={styles.pauseButtonText}>{isPaused ? 'Resume' : 'Pause'}</Text>
             </TouchableOpacity>
@@ -317,6 +485,22 @@ export default function LiveWorkoutScreen({ navigation, route }) {
           </View>
         )}
       </View>
+
+      {/* Modal set complete (semua set selesai) */}
+      <Modal visible={allSetsComplete && showSetCompleteModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <MaterialCommunityIcons name="party-popper" size={48} color="#FF6500" style={{ marginBottom: 12 }} />
+            <Text style={styles.modalTitle}>Semua Set Selesai!</Text>
+            <Text style={styles.modalDesc}>
+              Kamu sudah menyelesaikan {targetSets} set. Hebat!
+            </Text>
+            <TouchableOpacity style={styles.modalConfirm} onPress={handleStop}>
+              <Text style={styles.modalConfirmText}>Lihat Ringkasan</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal stop */}
       <Modal visible={showStopModal} transparent animationType="fade">
@@ -341,9 +525,11 @@ export default function LiveWorkoutScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   streamContainer: { height: '62%', backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
-  stream: { width: '100%', height: '100%' },
+  stream: { width: '100%', height: '100%', position: 'relative' },
+  streamImage: {
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+  },
   streamPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A' },
-  placeholderIcon: { fontSize: 48, marginBottom: 12 },
   placeholderText: { color: '#555', fontSize: 16, marginBottom: 6 },
   placeholderSub:  { color: '#444', fontSize: 12 },
   header: {
@@ -363,7 +549,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   timerText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  
+
+  // Rest overlay
+  restOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  restTitle: { color: '#FF6A00', fontSize: 28, fontWeight: '800', marginBottom: 8 },
+  restTimer: { color: '#FFF', fontSize: 64, fontWeight: '800', letterSpacing: 4 },
+  restSubtitle: { color: '#AAA', fontSize: 14, marginTop: 8, marginBottom: 24 },
+  skipRestButton: {
+    backgroundColor: '#FF6500',
+    paddingHorizontal: 32, paddingVertical: 14,
+    borderRadius: 28,
+  },
+  skipRestText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+
   centerStatus: {
     position: 'absolute',
     top: '50%',
@@ -373,7 +577,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  centerStatusIcon: { color: '#79E35F', fontSize: 16 },
   centerStatusText: { color: '#79E35F', fontSize: 14, fontWeight: '600' },
   badFormBanner: {
     position: 'absolute', top: 126, left: 16, right: 16,
@@ -422,4 +625,5 @@ const styles = StyleSheet.create({
   modalConfirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   modalCancel:{ padding: 14, width: '100%', alignItems: 'center' },
   modalCancelText:{ color: '#AAA', fontSize: 16 },
+
 });

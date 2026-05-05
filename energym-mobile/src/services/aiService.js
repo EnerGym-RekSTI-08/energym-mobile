@@ -107,6 +107,7 @@ export function connectAIWebSocket(ip = DEFAULT_IP, port = DEFAULT_PORT, session
           elbowAngle: data.elbow_angle,
           isBadForm:  data.is_bad_form,
           formIssues: data.form_issues,
+          activeArm:  data.active_arm ?? null,
         });
       } else if (data.type === 'session_ended') {
         onSessionEnded?.({
@@ -155,4 +156,13 @@ export async function checkAIHealth(ip, port = DEFAULT_PORT) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Pre-warm kamera + detector di edge PC.
+ * Panggil saat masuk LiveWorkout screen (sebelum user tekan Start).
+ * Fire-and-forget — tidak perlu await hasilnya.
+ */
+export function warmupAICamera(ip = DEFAULT_IP, port = DEFAULT_PORT) {
+  fetch(`http://${ip}:${port}/camera/warmup`, { method: 'POST' }).catch(() => {});
 }
