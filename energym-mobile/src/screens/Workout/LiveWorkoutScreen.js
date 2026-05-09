@@ -69,9 +69,10 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const [aiConnected, setAiConnected]   = useState(false);
   const [aiError, setAiError]           = useState(null);
   const [poseStatus, setPoseStatus]     = useState('Menunggu...');
-  const wsRef        = useRef(null);
-  const aiSummaryRef = useRef(null);
-  const stoppedRef   = useRef(false);
+  const wsRef          = useRef(null);
+  const aiSummaryRef   = useRef(null);
+  const stoppedRef     = useRef(false);
+  const formCountsRef  = useRef({ body_sway: 0, elbow_drift: 0, too_fast: 0, grip_rotation: 0 });
 
   // Refs untuk akses state terkini di callback
   const targetRepsRef = useRef(0);
@@ -262,6 +263,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
               grip_rotation: '⚠ Jaga posisi grip netral!',
             };
             const code = formIssues[0].split('_').slice(0, 2).join('_');
+            if (code in formCountsRef.current) formCountsRef.current[code] += 1;
             setBadFormMessage(issueMap[code] ?? '⚠ Bad Form!');
             totalBadRef.current += 1;
             setBadCount(totalBadRef.current);
@@ -329,20 +331,27 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     }
 
     const s = aiSummaryRef.current;
-    const finalPerfect = s?.validReps ?? perfectCount;
-    const finalBad     = s?.badReps   ?? badCount;
+    const finalPerfect  = s?.validReps  ?? perfectCount;
+    const finalBad      = s?.badReps    ?? badCount;
+    const finalAccuracy = s?.accuracy   ?? null;
+    const fc = formCountsRef.current;
 
-    addCompletedExercise({
+    const exerciseSummary = {
       id: exerciseId, name: exerciseName, sets: currentSet,
       perfectReps: finalPerfect, badReps: finalBad, duration: seconds,
-    });
+      aiSessionId,
+      aiAccuracy:       finalAccuracy,
+      bodySway:         fc.body_sway,
+      elbowDrift:       fc.elbow_drift,
+      tooFast:          fc.too_fast,
+      gripRotation:     fc.grip_rotation,
+    };
+
+    addCompletedExercise(exerciseSummary);
 
     navigation.navigate('WorkoutSummary', {
       workoutId, workoutName: route.params?.workoutName,
-      summaryData: [{
-        id: exerciseId, name: exerciseName, sets: currentSet,
-        perfectReps: finalPerfect, badReps: finalBad, duration: seconds,
-      }],
+      summaryData: [exerciseSummary],
     });
   };
 

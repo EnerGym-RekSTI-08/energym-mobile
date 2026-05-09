@@ -95,10 +95,16 @@ export default function WorkoutSummaryScreen({ route, navigation }) {
 
       // 3. Siapkan data untuk detail per exercise
       const exercisesToInsert = summaryData.map(ex => ({
-        history_id: historyData.id,
-        exercise_id: ex.id,
-        perfect_reps: ex.perfectReps || 0,
-        bad_reps: ex.badReps || 0
+        history_id:         historyData.id,
+        exercise_id:        ex.id,
+        perfect_reps:       ex.perfectReps    || 0,
+        bad_reps:           ex.badReps        || 0,
+        ai_accuracy:        ex.aiAccuracy     ?? null,
+        body_sway_count:    ex.bodySway       ?? 0,
+        elbow_drift_count:  ex.elbowDrift     ?? 0,
+        too_fast_count:     ex.tooFast        ?? 0,
+        grip_rotation_count: ex.gripRotation  ?? 0,
+        ai_session_id:      ex.aiSessionId    ?? null,
       }));
 
       // 4. Insert ke tabel workout_history_exercises
