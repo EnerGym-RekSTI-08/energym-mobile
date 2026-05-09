@@ -1,405 +1,629 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, Modal, BackHandler, ActivityIndicator, Alert, Dimensions 
+import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Modal,
+  ActivityIndicator, Alert, Dimensions, Image
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { MaterialIcons, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { supabase } from '../../services/supabase'; 
-// 1. IMPORT WORKOUT CONTEXT (Sesuaikan path-nya ya!)
+import { supabase } from '../../services/supabase';
 import { WorkoutContext } from '../../context/WorkoutContext';
+import {
+  startAISession,
+  stopAISession,
+  connectAIWebSocket,
+  checkAIHealth,
+  warmupAICamera,
+} from '../../services/aiService';
 
 const { width } = Dimensions.get('window');
+const REST_DURATION_SEC = 30; // Durasi istirahat antar set (detik)
 
 export default function LiveWorkoutScreen({ navigation, route }) {
-  const workoutId = route.params?.workoutId;
+  const insets = useSafeAreaInsets();
+  const aiIp      = route.params?.aiIp   ?? '192.168.1.68';
+  const aiPort    = route.params?.aiPort ?? 8000;
+  const workoutId  = route.params?.workoutId;
   const exerciseId = route.params?.exerciseId;
+  const stationId  = route.params?.stationId ?? 'STATION_01';
 
-  // 2. PANGGIL FUNGSI DARI CONTEXT
-  const { addCompletedExercise, setActiveWorkoutId } = useContext(WorkoutContext);
+  const { addCompletedExercise } = useContext(WorkoutContext);
 
-  const [permission, requestPermission] = useCameraPermissions();
-  const [loading, setLoading] = useState(true);
+  // Double-buffer snapshot (menghindari blinking)
+  const [bufferA, setBufferA] = useState(null);
+  const [bufferB, setBufferB] = useState(null);
+  const [activeBuffer, setActiveBuffer] = useState('A');
+  const activeBufferRef = useRef('A');
+  const pollingRef = useRef(null);
+  const loadingRef = useRef(false);
+
+  // State umum
+  const [loading, setLoading]             = useState(true);
   const [showStopModal, setShowStopModal] = useState(false);
-  const [targetTab, setTargetTab] = useState(null);
-  
-  // --- STATE DARI DATABASE ---
-  const [targetSets, setTargetSets] = useState(0);
-  const [targetReps, setTargetReps] = useState(0);
-  const [exerciseName, setExerciseName] = useState('');
+  const [targetSets, setTargetSets]       = useState(0);
+  const [targetReps, setTargetReps]       = useState(0);
+  const [exerciseName, setExerciseName]   = useState('');
 
-  // --- STATE WORKOUT & TIMER ---
-  const [isActive, setIsActive] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [currentSet, setCurrentSet] = useState(1);
-  const [currentReps, setCurrentReps] = useState(0);
-
-  // --- STATE DATA TEMPORER ---
+  // State workout
+  const [isActive, setIsActive]         = useState(false);
+  const [seconds, setSeconds]           = useState(0);
+  const [currentSet, setCurrentSet]     = useState(1);
+  const [currentReps, setCurrentReps]   = useState(0);
   const [perfectCount, setPerfectCount] = useState(0);
-  const [badCount, setBadCount] = useState(0);
+  const [badCount, setBadCount]         = useState(0);
   const [badFormMessage, setBadFormMessage] = useState(null);
   const badFormTimeout = useRef(null);
+  const [sessionStarted, setSessionStarted] = useState(false);
 
-  // FETCH DATA DARI SUPABASE
+  // State untuk set/rest management
+  const [isResting, setIsResting]         = useState(false);
+  const [restSeconds, setRestSeconds]     = useState(0);
+  const [showSetCompleteModal, setShowSetCompleteModal] = useState(false);
+  const [allSetsComplete, setAllSetsComplete] = useState(false);
+  const repOffsetRef = useRef(0);
+  const totalPerfectRef = useRef(0);
+  const totalBadRef = useRef(0);
+
+  // State AI
+  const [aiSessionId, setAiSessionId]   = useState(null);
+  const [aiConnected, setAiConnected]   = useState(false);
+  const [aiError, setAiError]           = useState(null);
+  const [poseStatus, setPoseStatus]     = useState('Menunggu...');
+  const wsRef        = useRef(null);
+  const aiSummaryRef = useRef(null);
+  const stoppedRef   = useRef(false);
+
+  // Refs untuk akses state terkini di callback
+  const targetRepsRef = useRef(0);
+  const targetSetsRef = useRef(0);
+  const currentSetRef = useRef(1);
+  const isRestingRef  = useRef(false);
+
+  // Sync refs
+  useEffect(() => { targetRepsRef.current = targetReps; }, [targetReps]);
+  useEffect(() => { targetSetsRef.current = targetSets; }, [targetSets]);
+  useEffect(() => { currentSetRef.current = currentSet; }, [currentSet]);
+  useEffect(() => { isRestingRef.current = isResting; }, [isResting]);
+
+  // Pre-warm kamera saat masuk screen (sebelum user tekan Start)
+  useEffect(() => {
+    warmupAICamera(aiIp, aiPort);
+  }, []);
+
+  // Fetch data latihan
   useEffect(() => {
     const fetchExerciseData = async () => {
       try {
         setLoading(true);
         const { data, error } = await supabase
           .from('workout_exercises')
-          .select(`
-            total_sets,
-            total_reps,
-            exercises (
-              name
-            )
-          `)
+          .select('total_sets, total_reps, exercises (name)')
           .eq('workout_id', workoutId)
           .eq('exercise_id', exerciseId)
           .single();
-
         if (error) throw error;
-
         if (data) {
-          const name = Array.isArray(data.exercises) ? data.exercises[0]?.name : data.exercises?.name;
+          const name = Array.isArray(data.exercises)
+            ? data.exercises[0]?.name : data.exercises?.name;
           setExerciseName(name || 'Unknown Exercise');
           setTargetSets(data.total_sets);
           setTargetReps(data.total_reps);
         }
-      } catch (error) {
-        console.error('Error fetching exercise:', error.message);
-        Alert.alert("Gagal Memuat Data", "Periksa koneksi atau ID latihan yang diberikan.");
+      } catch (err) {
+        console.error('Fetch exercise error:', err.message);
       } finally {
         setLoading(false);
       }
     };
-
-    if (workoutId && exerciseId) {
-      fetchExerciseData();
-    }
-    requestPermission();
+    fetchExerciseData();
   }, [workoutId, exerciseId]);
 
-  // LOGIKA STOPWATCH & BACK BUTTON
+  // Timer utama (workout)
   useEffect(() => {
-    let interval = null;
-    if (isActive && !isPaused) {
-      interval = setInterval(() => setSeconds(prev => prev + 1), 1000);
-    } else {
-      clearInterval(interval);
+    let interval;
+    if (isActive && !isResting) interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isActive, isResting]);
+
+  // Timer istirahat antar set
+  useEffect(() => {
+    let interval;
+    if (isResting) {
+      interval = setInterval(() => {
+        setRestSeconds(prev => {
+          if (prev <= 1) {
+            // Rest selesai → mulai set berikutnya
+            clearInterval(interval);
+            setIsResting(false);
+            setShowSetCompleteModal(false);
+            setPoseStatus('Set baru dimulai!');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
+    return () => clearInterval(interval);
+  }, [isResting]);
 
-    const backAction = () => {
-      if (isActive) {
-        handleInterrupt(null);
-        return true; 
-      }
-      return false;
-    };
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
+  // Cleanup saat unmount
+  useEffect(() => {
     return () => {
-      backHandler.remove();
-      clearInterval(interval);
-      if (badFormTimeout.current) clearTimeout(badFormTimeout.current);
+      clearInterval(pollingRef.current);
+      wsRef.current?.close();
     };
-  }, [isActive, isPaused]);
+  }, []);
 
-  // LOGIKA PERHITUNGAN REPS & SETS
-  const handleAddRep = (isPerfect) => {
-    if (!isActive || isPaused) return;
+  // ===== Set Completion Handler =====
+  const handleSetComplete = useCallback((repCountFromAI) => {
+    // Simpan offset untuk set berikutnya
+    repOffsetRef.current = repCountFromAI;
 
-    let newReps = currentReps + 1;
-    let currentPerfect = perfectCount;
-    let currentBad = badCount;
+    const setNum = currentSetRef.current;
+    const totalSetsTarget = targetSetsRef.current;
 
-    if (isPerfect) {
-      currentPerfect += 1;
-      setPerfectCount(currentPerfect);
-      setBadFormMessage(null);
+    if (setNum >= totalSetsTarget) {
+      // Semua set selesai!
+      setAllSetsComplete(true);
+      setShowSetCompleteModal(true);
+      setPoseStatus('Semua set selesai!');
     } else {
-      currentBad += 1;
-      setBadCount(currentBad);
-      setBadFormMessage("Bad Form! Keep elbow still.");
-      if (badFormTimeout.current) clearTimeout(badFormTimeout.current);
-      badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 3000);
+      // Masih ada set berikutnya → mulai rest
+      setCurrentSet(prev => prev + 1);
+      setCurrentReps(0);
+      setIsResting(true);
+      setRestSeconds(REST_DURATION_SEC);
+      setShowSetCompleteModal(true);
+      setPoseStatus('Istirahat...');
+    }
+  }, []);
+
+  const startSnapshotPolling = (ip, port) => {
+    clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
+      const ts = Date.now();
+      const newUri = `http://${ip}:${port}/stream/snapshot?t=${ts}`;
+
+      if (activeBufferRef.current === 'A') {
+        setBufferB(newUri);
+      } else {
+        setBufferA(newUri);
+      }
+    }, 250);
+  };
+
+  const handleBackBufferLoaded = () => {
+    loadingRef.current = false;
+    setActiveBuffer(prev => {
+      const next = prev === 'A' ? 'B' : 'A';
+      activeBufferRef.current = next;
+      return next;
+    });
+  };
+
+  const handleBufferError = () => {
+    loadingRef.current = false;
+  };
+
+  const handleStart = async () => {
+    stoppedRef.current = false;
+
+    const healthy = await checkAIHealth(aiIp, aiPort);
+    if (!healthy) {
+      Alert.alert(
+        'AI Edge PC Tidak Tersambung',
+        `Tidak bisa reach ${aiIp}:${aiPort}`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          { text: 'Lanjut Tanpa AI', onPress: () => {
+            startSnapshotPolling(aiIp, aiPort);
+            setSessionStarted(true);
+            setIsActive(true);
+          }},
+        ]
+      );
+      return;
     }
 
-    if (newReps >= targetReps) {
-      if (currentSet >= targetSets) {
-        setCurrentReps(targetReps);
-        finishWorkout(currentPerfect, currentBad);
-      } else {
-        setCurrentSet(prev => prev + 1);
-        setCurrentReps(0);
-      }
-    } else {
-      setCurrentReps(newReps);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { Alert.alert('Error', 'Silakan login ulang.'); return; }
+
+    try {
+      const sessionId = await startAISession({
+        ip: aiIp, port: aiPort,
+        userId: user.id, stationId,
+        exerciseId, exerciseName, workoutId,
+      });
+      setAiSessionId(sessionId);
+
+      startSnapshotPolling(aiIp, aiPort);
+      await new Promise(r => setTimeout(r, 500));
+
+      const ws = connectAIWebSocket(aiIp, aiPort, sessionId, {
+        onFrameUpdate: ({ repCount, state, isBadForm, formIssues, activeArm }) => {
+          // Hitung rep relatif terhadap set saat ini
+          const repsInSet = repCount - repOffsetRef.current;
+
+          // Jangan update saat sedang istirahat
+          if (isRestingRef.current) return;
+
+          setCurrentReps(repsInSet);
+          const armLabel = activeArm && activeArm !== 'none' ? ` (${activeArm})` : '';
+          setPoseStatus(`${state}${armLabel} | reps: ${repsInSet}`);
+
+          if (isBadForm && formIssues.length > 0) {
+            const issueMap = {
+              body_sway:     '⚠ Jangan ayun badan!',
+              elbow_drift:   '⚠ Siku jangan maju!',
+              too_fast:      '⚠ Perlambat gerakan!',
+              grip_rotation: '⚠ Jaga posisi grip netral!',
+            };
+            const code = formIssues[0].split('_').slice(0, 2).join('_');
+            setBadFormMessage(issueMap[code] ?? '⚠ Bad Form!');
+            totalBadRef.current += 1;
+            setBadCount(totalBadRef.current);
+            clearTimeout(badFormTimeout.current);
+            badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 2500);
+          } else {
+            // Update perfect count (cek apakah rep baru terhitung)
+            const prevPerfect = totalPerfectRef.current;
+            const newPerfect = repCount - totalBadRef.current;
+            if (newPerfect > prevPerfect) {
+              totalPerfectRef.current = newPerfect;
+              setPerfectCount(newPerfect);
+            }
+          }
+
+          // Cek apakah set selesai
+          const target = targetRepsRef.current;
+          if (target > 0 && repsInSet >= target) {
+            handleSetComplete(repCount);
+          }
+        },
+        onSessionEnded: (summary) => {
+          aiSummaryRef.current = summary;
+          setAiConnected(false);
+          setPoseStatus('Sesi selesai');
+        },
+        onError: () => {
+          setAiError('Koneksi AI terputus.');
+          setAiConnected(false);
+        },
+      });
+
+      wsRef.current = ws;
+      setAiConnected(true);
+      setSessionStarted(true);
+      setIsActive(true);
+
+    } catch (err) {
+      Alert.alert('Gagal Memulai AI', err.message);
     }
   };
 
-  // 3. UPDATE FUNGSI FINISH WORKOUT
-  const finishWorkout = async (finalPerfect, finalBad) => {
-    setIsPaused(true);
+  const handlePauseToggle = () => {
+    if (!sessionStarted || isResting) return;
+    setIsActive(prev => !prev);
+  };
 
-    // Simpan hasil latihan ini ke dalam Context (Keranjang Sementara)
+  const handleStop = async () => {
+    if (stoppedRef.current) return;
+    stoppedRef.current = true;
+
+    setIsActive(false);
+    setSessionStarted(false);
+    setShowStopModal(false);
+    setIsResting(false);
+    setShowSetCompleteModal(false);
+
+    clearInterval(pollingRef.current);
+    setBufferA(null);
+    setBufferB(null);
+    wsRef.current?.close();
+
+    if (aiSessionId) {
+      await stopAISession(aiIp, aiPort, aiSessionId).catch(() => {});
+    }
+
+    const s = aiSummaryRef.current;
+    const finalPerfect = s?.validReps ?? perfectCount;
+    const finalBad     = s?.badReps   ?? badCount;
+
     addCompletedExercise({
-      exerciseId: exerciseId,
-      perfectCount: finalPerfect,
-      badCount: finalBad,
-      duration: seconds
+      id: exerciseId, name: exerciseName, sets: currentSet,
+      perfectReps: finalPerfect, badReps: finalBad, duration: seconds,
     });
 
-    // Tandai bahwa sesi workout ini sedang aktif (agar tidak tercampur workout lain)
-    setActiveWorkoutId(workoutId);
-
-    // Ubah navigasi ke WorkoutDetail, bukan ke Home
-    Alert.alert(
-      "Workout Finished!!",
-      `Don't forget to take a quick rest.`,
-      [{ text: "Back to Workout Details", onPress: () => navigation.navigate('WorkoutDetail', { workoutId: workoutId }) }]
-    );
+    navigation.navigate('WorkoutSummary', {
+      workoutId, workoutName: route.params?.workoutName,
+      summaryData: [{
+        id: exerciseId, name: exerciseName, sets: currentSet,
+        perfectReps: finalPerfect, badReps: finalBad, duration: seconds,
+      }],
+    });
   };
 
-  const formatTime = (totalSeconds) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // NAVIGASI NAVBAR PALSU & MODAL STOP
-  const handleInterrupt = (tabName) => {
-    setIsPaused(true);
-    setTargetTab(tabName);
-    setShowStopModal(true);
-  };
-
-  const confirmStop = () => {
-    setShowStopModal(false);
-    if (targetTab) {
-      navigation.navigate(targetTab);
-    } else {
-      navigation.goBack();
-    }
+  const handleSkipRest = () => {
+    setIsResting(false);
+    setRestSeconds(0);
+    setShowSetCompleteModal(false);
+    setPoseStatus('Set baru dimulai!');
   };
 
   if (loading) {
-    return (
-      <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
-        <ActivityIndicator size="large" color="#FF6500" />
-        <Text style={{color: 'white', marginTop: 10, fontFamily: 'Satoshi-Medium'}}>Memuat data latihan...</Text>
-      </View>
-    );
+    return <View style={styles.container}><ActivityIndicator size="large" color="#FF6500" /></View>;
   }
+
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss_str = String(seconds % 60).padStart(2, '0');
+  const isPaused = sessionStarted && !isActive;
+
+  // Format rest timer
+  const restMM = String(Math.floor(restSeconds / 60)).padStart(2, '0');
+  const restSS = String(restSeconds % 60).padStart(2, '0');
+  const repsPerSet = targetReps;
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.stationCode}>ST-01</Text>
-        <Text style={styles.headerTitle}>{exerciseName || 'Live Workout'}</Text>
-        <View style={styles.timerContainer}>
-          <View style={[styles.redDot, isPaused && { backgroundColor: '#888' }]} />
-          <Text style={styles.timerText}>{formatTime(seconds)}</Text>
-        </View>
-      </View>
 
-      {/* WARNING BANNER */}
-      {badFormMessage && (
-        <View style={styles.warningBanner}>
-          <Ionicons name="warning" size={20} color="white" />
-          <Text style={styles.warningText}>{badFormMessage}</Text>
-        </View>
-      )}
-
-      {/* MAIN CONTENT AREA */}
-      <View style={styles.content}>
-        {permission?.granted ? (
-          <CameraView style={StyleSheet.absoluteFillObject} facing="front" />
+      {/* Webcam preview */}
+      <View style={styles.streamContainer}>
+        {(bufferA || bufferB) ? (
+          <View style={styles.stream}>
+            {/* Buffer A */}
+            <Image
+              source={bufferA ? { uri: bufferA } : undefined}
+              style={[
+                styles.streamImage,
+                { opacity: activeBuffer === 'A' ? 1 : 0 },
+              ]}
+              resizeMode="cover"
+              fadeDuration={0}
+              onLoad={activeBuffer !== 'A' ? handleBackBufferLoaded : undefined}
+              onError={activeBuffer !== 'A' ? handleBufferError : undefined}
+            />
+            {/* Buffer B */}
+            <Image
+              source={bufferB ? { uri: bufferB } : undefined}
+              style={[
+                styles.streamImage,
+                { opacity: activeBuffer === 'B' ? 1 : 0 },
+              ]}
+              resizeMode="cover"
+              fadeDuration={0}
+              onLoad={activeBuffer !== 'B' ? handleBackBufferLoaded : undefined}
+              onError={activeBuffer !== 'B' ? handleBufferError : undefined}
+            />
+          </View>
         ) : (
-          <View style={styles.cameraPlaceholder} />
+          <View style={styles.streamPlaceholder}>
+            <MaterialIcons name="videocam-off" size={56} color="#555" style={{ marginBottom: 12 }} />
+            <Text style={styles.placeholderText}>Webcam belum aktif</Text>
+            <Text style={styles.placeholderSub}>Tekan Start untuk mulai</Text>
+          </View>
         )}
-        
-        {!isActive ? (
-          <View style={styles.cameraOverlay}>
-            <TouchableOpacity style={styles.bigStartButton} onPress={() => setIsActive(true)}>
-              <Text style={styles.bigStartText}>Start</Text>
+
+        {/* Header overlay */}
+        <View style={[styles.header, { paddingTop: 12 + insets.top }]}>
+          <Text style={styles.stationText}>{stationId}</Text>
+          <Text style={styles.headerTitle}>Live Workout</Text>
+          <Text style={styles.timerText}>• {mm}:{ss_str}</Text>
+        </View>
+
+        {/* Rest overlay */}
+        {isResting && (
+          <View style={styles.restOverlay}>
+            <MaterialCommunityIcons name="timer-sand" size={52} color="#FF6A00" style={{ marginBottom: 12 }} />
+            <Text style={styles.restTitle}>Istirahat</Text>
+            <Text style={styles.restTimer}>{restMM}:{restSS}</Text>
+            <Text style={styles.restSubtitle}>Set berikutnya segera dimulai</Text>
+            <TouchableOpacity style={styles.skipRestButton} onPress={handleSkipRest}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.skipRestText}>Lewati</Text>
+                <MaterialIcons name="skip-next" size={20} color="#FFF" />
+              </View>
             </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.liveOverlay}>
-            
-            {/* DUMMY CV BUTTONS */}
-            <View style={styles.dummyCVContainer}>
-              <TouchableOpacity 
-                style={[styles.dummyCVBtnPerfect, isPaused && { opacity: 0.4 }]} 
-                onPress={() => handleAddRep(true)}
-                disabled={isPaused}
-              >
-                <Text style={styles.dummyCVText}>+1 Perfect</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.dummyCVBtnBad, isPaused && { opacity: 0.4 }]} 
-                onPress={() => handleAddRep(false)}
-                disabled={isPaused}
-              >
-                <Text style={styles.dummyCVText}>+1 Bad</Text>
-              </TouchableOpacity>
-            </View>
+        )}
 
-            {/* HUD BOXES */}
-            <View style={styles.hudContainer}>
-              <View style={styles.hudSmallBox}>
-                <Text style={styles.hudLabel}>Set: <Text style={styles.hudValue}>{currentSet}/{targetSets}</Text></Text>
-              </View>
-              <View style={styles.hudCenterBox}>
-                <Text style={styles.hudCenterLabel}>Total Reps:</Text>
-                <Text style={styles.hudCenterValue}>{targetReps}</Text>
-              </View>
-              <View style={styles.hudSmallBox}>
-                <Text style={styles.hudLabel}>Reps: <Text style={styles.hudValue}>{currentReps}</Text></Text>
-              </View>
-            </View>
+        {/* Status center */}
+        {isActive && !isResting && (
+          <View style={styles.centerStatus}>
+            <MaterialIcons name="visibility" size={18} color="#79E35F" />
+            <Text style={styles.centerStatusText}>{poseStatus}</Text>
+          </View>
+        )}
 
-            {/* CONTROLS */}
-            <View style={styles.controlsContainer}>
-              <TouchableOpacity 
-                style={[styles.controlButton, isPaused && { backgroundColor: '#4CAF50' }]} 
-                onPress={() => setIsPaused(!isPaused)}
-              >
-                <Ionicons name={isPaused ? "play" : "pause"} size={20} color="white" />
-                <Text style={styles.controlText}>{isPaused ? "Resume" : "Pause"}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.controlButton} onPress={() => handleInterrupt(null)}>
-                <Ionicons name="square" size={16} color="white" style={{marginRight: 4}} />
-                <Text style={styles.controlText}>Stop</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Bad form banner */}
+        {badFormMessage && (
+          <View style={styles.badFormBanner}>
+            <MaterialIcons name="warning" size={18} color="#FFF" />
+            <Text style={styles.badFormText}>{badFormMessage}</Text>
           </View>
         )}
       </View>
 
-      {/* FAKE NAVBAR */}
-      <View style={styles.fakeBottomTab}>
-        <TouchableOpacity style={styles.tabButton} onPress={() => handleInterrupt('home')}>
-          <Ionicons name="home-outline" size={24} color="#888" />
-          <Text style={styles.tabLabel}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabButton} onPress={() => handleInterrupt('workout')}>
-          <FontAwesome5 name="dumbbell" size={20} color="#888" />
-          <Text style={styles.tabLabel}>Workout</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.scanQRButton} onPress={() => handleInterrupt('scan')}>
-          <View style={[styles.scanQRIconContainer, { backgroundColor: '#4CAF50' }]}>
-            <MaterialIcons name="qr-code-2" size={32} color="white" />
-          </View>
-          <Text style={[styles.scanQRLabel, { color: '#4CAF50', fontFamily: 'Satoshi-Bold' }]}>Connected</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabButton} onPress={() => handleInterrupt('history')}>
-          <Ionicons name="stats-chart-outline" size={24} color="#888" />
-          <Text style={styles.tabLabel}>History</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabButton} onPress={() => handleInterrupt('profile')}>
-          <Ionicons name="person-outline" size={24} color="#888" />
-          <Text style={styles.tabLabel}>Profile</Text>
-        </TouchableOpacity>
+      {/* Stats bar */}
+      <View style={styles.statsBar}>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Set</Text>
+          <Text style={styles.statValue}>{currentSet}/{targetSets}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Target Reps</Text>
+          <Text style={styles.statValue}>{repsPerSet}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Reps</Text>
+          <Text style={styles.statValue}>{currentReps}</Text>
+        </View>
       </View>
 
-      {/* MODAL STOP WORKOUT */}
-      <Modal animationType="fade" transparent={true} visible={showStopModal} onRequestClose={() => setShowStopModal(false)}>
+      {/* Kontrol */}
+      <View style={styles.controls}>
+        {!sessionStarted ? (
+          <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+            <Text style={styles.startButtonText}>Start</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.controlsBar}>
+            <TouchableOpacity
+              style={[styles.pauseButton, isResting && { opacity: 0.5 }]}
+              onPress={handlePauseToggle}
+              disabled={isResting}
+            >
+              <MaterialIcons name={isPaused ? 'play-arrow' : 'pause'} size={22} color="#FFF" />
+              <Text style={styles.pauseButtonText}>{isPaused ? 'Resume' : 'Pause'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stopButton} onPress={() => setShowStopModal(true)}>
+              <MaterialIcons name="stop" size={22} color="#FFF" />
+              <Text style={styles.stopButtonText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Modal set complete (semua set selesai) */}
+      <Modal visible={allSetsComplete && showSetCompleteModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={60} color="#FFCEAD" style={{ marginBottom: 15 }} />
-            <Text style={styles.modalTitle}>Stop Workout?</Text>
-            <Text style={styles.modalSubtitle}>The training session is in progress. If you stop now, your progress will not be saved.</Text>
-            
-            <TouchableOpacity style={styles.stopButton} onPress={confirmStop}>
-              <Text style={styles.stopButtonText}>Yes, Stop</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.resumeButton} onPress={() => { setShowStopModal(false); setIsPaused(false); }}>
-              <Text style={styles.resumeButtonText}>Resume Workout</Text>
+          <View style={styles.modalBox}>
+            <MaterialCommunityIcons name="party-popper" size={48} color="#FF6500" style={{ marginBottom: 12 }} />
+            <Text style={styles.modalTitle}>Semua Set Selesai!</Text>
+            <Text style={styles.modalDesc}>
+              Kamu sudah menyelesaikan {targetSets} set. Hebat!
+            </Text>
+            <TouchableOpacity style={styles.modalConfirm} onPress={handleStop}>
+              <Text style={styles.modalConfirmText}>Lihat Ringkasan</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* Modal stop */}
+      <Modal visible={showStopModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Stop Sesi?</Text>
+            <Text style={styles.modalDesc}>Data latihan akan disimpan.</Text>
+            <TouchableOpacity style={styles.modalConfirm} onPress={handleStop}>
+              <Text style={styles.modalConfirmText}>Ya, Stop</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowStopModal(false)}>
+              <Text style={styles.modalCancelText}>Lanjut Latihan</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
+  streamContainer: { height: '62%', backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
+  stream: { width: '100%', height: '100%', position: 'relative' },
+  streamImage: {
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+  },
+  streamPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A' },
+  placeholderText: { color: '#555', fontSize: 16, marginBottom: 6 },
+  placeholderSub:  { color: '#444', fontSize: 12 },
   header: {
-    backgroundColor: '#FF6500', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 40, paddingBottom: 20, zIndex: 10
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 18,
+    backgroundColor: '#FF6A00',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  stationCode: { color: 'white', fontFamily: 'Satoshi-Bold', fontSize: 12 },
-  headerTitle: { color: 'white', fontFamily: 'Satoshi-Medium', fontSize: 16 },
-  timerContainer: { flexDirection: 'row', alignItems: 'center' },
-  redDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF0000', marginRight: 6 },
-  timerText: { color: 'white', fontFamily: 'Satoshi-Regular', fontSize: 10 },
-
-  warningBanner: {
-    position: 'absolute', top: 100, left: 20, right: 20, backgroundColor: '#990000',
-    flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, zIndex: 20,
-    elevation: 5, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: {height: 2, width: 0}
+  stationText:{ color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.8 },
+  headerTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '700',
   },
-  warningText: { color: 'white', fontFamily: 'Satoshi-Medium', fontSize: 14, marginLeft: 10 },
+  timerText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
 
-  content: { flex: 1, position: 'relative', backgroundColor: '#000' },
-  cameraPlaceholder: { ...StyleSheet.absoluteFillObject, backgroundColor: '#111' },
-  cameraOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  liveOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', paddingBottom: 20 },
-
-  bigStartButton: {
-    width: 120, height: 120, borderRadius: 60, backgroundColor: '#FF6500', justifyContent: 'center', alignItems: 'center',
-    elevation: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10,
+  // Rest overlay
+  restOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
-  bigStartText: { color: 'white', fontSize: 24, fontFamily: 'Satoshi-Bold' },
-
-  dummyCVContainer: { position: 'absolute', top: 20, right: 20, gap: 10 },
-  dummyCVBtnPerfect: { backgroundColor: '#4CAF50', padding: 10, borderRadius: 8, elevation: 3 },
-  dummyCVBtnBad: { backgroundColor: '#FF5252', padding: 10, borderRadius: 8, elevation: 3 },
-  dummyCVText: { color: 'white', fontFamily: 'Satoshi-Bold', fontSize: 12 },
-
-  hudContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 20, gap: 15 },
-  hudSmallBox: { backgroundColor: '#993D00', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 15, marginBottom: 5 },
-  hudLabel: { color: '#FFFFFF', fontFamily: 'Satoshi-Light', fontSize: 14 },
-  hudValue: { color: 'white', fontFamily: 'Satoshi-Bold', fontSize: 14 },
-  hudCenterBox: { backgroundColor: '#993D00', paddingVertical: 15, paddingHorizontal: 25, borderRadius: 20, alignItems: 'center' },
-  hudCenterLabel: { color: '#FFFFFF', fontFamily: 'Satoshi-Light', fontSize: 14, marginBottom: 4 },
-  hudCenterValue: { color: 'white', fontFamily: 'Satoshi-Bold', fontSize: 20, lineHeight: 32 },
-
-  controlsContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 10 },
-  controlButton: { 
-    backgroundColor: '#FF6500', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    width: 130, paddingVertical: 12, borderRadius: 12 
+  restTitle: { color: '#FF6A00', fontSize: 28, fontWeight: '800', marginBottom: 8 },
+  restTimer: { color: '#FFF', fontSize: 64, fontWeight: '800', letterSpacing: 4 },
+  restSubtitle: { color: '#AAA', fontSize: 14, marginTop: 8, marginBottom: 24 },
+  skipRestButton: {
+    backgroundColor: '#FF6500',
+    paddingHorizontal: 32, paddingVertical: 14,
+    borderRadius: 28,
   },
-  controlText: { color: 'white', fontFamily: 'Satoshi-Regular', fontSize: 16, marginLeft: 6 },
+  skipRestText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 
-  fakeBottomTab: {
-    flexDirection: 'row', height: 80, backgroundColor: '#1E1E1E', borderTopWidth: 1, borderTopColor: '#333',
-    justifyContent: 'space-around', alignItems: 'center', paddingBottom: 15,
+  centerStatus: {
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
+    transform: [{ translateY: -12 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  tabButton: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  tabLabel: { color: '#888', fontSize: 9, marginTop: 4, fontFamily: 'Satoshi-Regular' },
-  scanQRButton: { alignItems: 'center', justifyContent: 'center', flex: 1, marginTop: -20 },
-  scanQRIconContainer: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginBottom: 4, elevation: 4 },
-  scanQRLabel: { fontSize: 9, marginTop: 2 },
+  centerStatusText: { color: '#79E35F', fontSize: 14, fontWeight: '600' },
+  badFormBanner: {
+    position: 'absolute', top: 126, left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(150,0,0,0.86)',
+    paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, gap: 8,
+  },
+  badFormText: { color: '#FFF', fontWeight: '600', fontSize: 13, flex: 1 },
+  statsBar: {
+    marginTop: -24,
+    marginHorizontal: 20,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    gap: 12,
+  },
+  statItem:{
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#8B4A12',
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  statValue:{ color: '#FFF', fontSize: 18, fontWeight: '700', marginTop: 2 },
+  statLabel:{ color: '#F6E7DA', fontSize: 11 },
+  controls:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
+  controlsBar:{
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1E1E1E', padding: 12, borderRadius: 28, width: width - 40,
+  },
+  startButton: { backgroundColor: '#FF6500', paddingHorizontal: 72, paddingVertical: 18, borderRadius: 36 },
+  startButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  pauseButton:{
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FF7A1A', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 22,
+  },
+  pauseButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  stopButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FF7A1A', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 22,
+  },
+  stopButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)' },
+  modalBox: { backgroundColor: '#1A1A1A', borderRadius: 16, padding: 24, width: '80%', alignItems: 'center' },
+  modalTitle:{ color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
+  modalDesc:{ color: '#AAA', marginBottom: 24, textAlign: 'center' },
+  modalConfirm: { backgroundColor: '#FF6500', padding: 14, borderRadius: 10, width: '100%', alignItems: 'center', marginBottom: 8 },
+  modalConfirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  modalCancel:{ padding: 14, width: '100%', alignItems: 'center' },
+  modalCancelText:{ color: '#AAA', fontSize: 16 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
-  modalContent: { backgroundColor: '#FF6500', borderRadius: 30, padding: 30, alignItems: 'center', width: '100%' },
-  modalTitle: { color: 'white', fontSize: 16, fontFamily: 'Satoshi-Bold', marginBottom: 10 },
-  modalSubtitle: { color: '#FFFFFF', fontSize: 10, fontFamily: 'Satoshi-Regular', textAlign: 'center', lineHeight: 20, marginBottom: 30 },
-  stopButton: { backgroundColor: '#3B3838', width: '100%', paddingVertical: 15, borderRadius: 15, alignItems: 'center', marginBottom: 15 },
-  stopButtonText: { color: 'white', fontSize: 16, fontFamily: 'Satoshi-Bold' },
-  resumeButton: { paddingVertical: 10 },
-  resumeButtonText: { color: 'white', fontSize: 12, fontFamily: 'Satoshi-Bold' },
 });
