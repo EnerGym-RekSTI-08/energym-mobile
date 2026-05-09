@@ -209,6 +209,24 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     loadingRef.current = false;
   };
 
+  const markStationBusy = async () => {
+    try {
+      await supabase
+        .from('stations')
+        .update({ current_workout_id: 1 })
+        .eq('station_code', stationId);
+    } catch { /* non-critical */ }
+  };
+
+  const markStationFree = async () => {
+    try {
+      await supabase
+        .from('stations')
+        .update({ current_workout_id: null })
+        .eq('station_code', stationId);
+    } catch { /* non-critical */ }
+  };
+
   const handleStart = async () => {
     stoppedRef.current = false;
 
@@ -300,6 +318,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
       setAiConnected(true);
       setSessionStarted(true);
       setIsActive(true);
+      markStationBusy();
 
     } catch (err) {
       Alert.alert('Gagal Memulai AI', err.message);
@@ -329,6 +348,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     if (aiSessionId) {
       await stopAISession(aiIp, aiPort, aiSessionId).catch(() => {});
     }
+    markStationFree();
 
     const s = aiSummaryRef.current;
     const finalPerfect  = s?.validReps  ?? perfectCount;

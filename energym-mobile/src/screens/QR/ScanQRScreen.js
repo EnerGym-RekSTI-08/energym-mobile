@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../../services/supabase';
 
 // ─── IP FALLBACK untuk dev (dipakai tombol dummy) ────────────────────────────
 // Ganti dengan IP laptop Anda. Cara cek: jalankan `ipconfig` (Windows)
@@ -61,8 +62,8 @@ export default function ScanQRScreen({ navigation, route }) {
     setShowModal(true);
   };
 
-  // ─── Handler "Allow Webcam" di modal ───────────────────────────────────────
-  const handleAllowWebcam = () => {
+  // ─── Cek status station di DB, lalu navigate ──────────────────────────────
+  const handleAllowWebcam = async () => {
     setShowModal(false);
     const { station_id, ip, port } = scannedData;
     const returnTo = route?.params?.returnTo;
@@ -75,8 +76,35 @@ export default function ScanQRScreen({ navigation, route }) {
       aiPort: port,
     };
 
+    // Cek apakah station sedang dipakai orang lain
+    try {
+      const { data: station } = await supabase
+        .from('stations')
+        .select('station_code, current_workout_id')
+        .eq('station_code', station_id)
+        .maybeSingle();
+
+      if (station?.current_workout_id != null) {
+        Alert.alert(
+          'Station Sedang Digunakan',
+          'Alat gym ini sedang dipakai oleh pengguna lain. Coba lagi nanti.',
+          [
+            { text: 'Batal', style: 'cancel', onPress: () => { setIsScanning(true); scanLock.current = false; } },
+            { text: 'Tetap Lanjut', onPress: () => doNavigate(returnTo, paramsWithAI) },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // Jika DB tidak bisa diakses, lanjut saja
+    }
+
+    doNavigate(returnTo, paramsWithAI);
+  };
+
+  const doNavigate = (returnTo, params) => {
     if (returnTo) {
-      navigation.navigate(returnTo, paramsWithAI);
+      navigation.navigate(returnTo, params);
     } else {
       navigation.navigate('home');
     }
