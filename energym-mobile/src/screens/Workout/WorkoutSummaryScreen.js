@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Circle, G } from 'react-native-svg';
@@ -9,6 +9,14 @@ import { WorkoutContext } from '../../context/WorkoutContext';
 
 const defaultExerciseImage = require('../../assets/images/profile picture.webp');
 
+// MET (Metabolic Equivalent of Task) untuk resistance/weight training — standar ACSM
+const MET_WEIGHT_TRAINING = 5.0;
+
+function calculateCalories(weightKg, durationSeconds) {
+  const durationHours = durationSeconds / 3600;
+  return Math.round(MET_WEIGHT_TRAINING * weightKg * durationHours);
+}
+
 export default function WorkoutSummaryScreen({ route, navigation }) {
   const { workoutName, summaryData = [], workoutId } = route.params || {};
   const { clearSession } = useContext(WorkoutContext);
@@ -17,6 +25,22 @@ export default function WorkoutSummaryScreen({ route, navigation }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [userWeight, setUserWeight] = useState(70); // default 70kg jika belum di-fetch
+
+  // Fetch berat badan user dari profiles
+  useEffect(() => {
+    const fetchWeight = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('weight')
+        .eq('id', user.id)
+        .single();
+      if (data?.weight) setUserWeight(data.weight);
+    };
+    fetchWeight();
+  }, []);
 
   // -- KALKULASI DATA --
   const totalSets = summaryData.reduce((acc, curr) => acc + (curr.sets || 0), 0);
@@ -25,10 +49,10 @@ export default function WorkoutSummaryScreen({ route, navigation }) {
   const totalBad = summaryData.reduce((acc, curr) => acc + (curr.badReps || 0), 0);
   const totalRepsActual = totalPerfect + totalBad;
   const perfectPercentage = totalRepsActual > 0 ? Math.round((totalPerfect / totalRepsActual) * 100) : 0;
-  
+
   const totalDurationSeconds = summaryData.reduce((acc, curr) => acc + (curr.duration || 0), 0);
-  const totalDurationMinutes = Math.max(1, Math.round(totalDurationSeconds / 60)); 
-  const estimatedCalories = 450; 
+  const totalDurationMinutes = Math.max(1, Math.round(totalDurationSeconds / 60));
+  const estimatedCalories = calculateCalories(userWeight, totalDurationSeconds);
 
   const now = new Date();
   const timeString = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');

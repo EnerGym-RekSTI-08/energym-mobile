@@ -7,9 +7,6 @@ import { supabase } from '../../services/supabase';
 
 const defaultExerciseImage = require('../../assets/images/profile picture.webp'); 
 
-// 💡 DAFTAR ID EXERCISE YANG SUDAH DIDUKUNG AI
-// Ganti string di bawah ini dengan ID asli dari database Supabase kamu.
-// Jika tipe ID kamu di database adalah angka, tulis tanpa tanda kutip, contoh: [1, 2, 5]
 const AI_READY_EXERCISE_IDS = [
   '6d18d781-55f7-4a4d-8e6d-d7f4510a64bc', 
   '4197a7cc-2d44-49de-aca6-5efeccacf924', 
@@ -57,12 +54,8 @@ export default function ExerciseDetailScreen({ route, navigation }) {
     }
   };
 
-  // 💡 LOGIKA FILTER TOMBOL START
-  // 1. Cek apakah diakses dari Workout (punya workoutId)
   const isPartOfWorkout = !!workoutId;
-  // 2. Cek apakah ID exercise ini ada di dalam daftar yang didukung AI
   const isAiReady = AI_READY_EXERCISE_IDS.includes(exerciseId);
-  // 3. Tombol hanya muncul jika KEDUANYA true
   const showStartButton = isPartOfWorkout && isAiReady; 
 
   if (loading) {
