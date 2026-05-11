@@ -217,7 +217,6 @@ export default function LiveWorkoutScreen({ navigation, route }) {
         .from('stations')
         .update({
           current_workout_id: workoutId,
-          status: 'busy',
           last_sync: new Date().toISOString(),
         })
         .eq('station_code', stationId);
@@ -230,7 +229,6 @@ export default function LiveWorkoutScreen({ navigation, route }) {
         .from('stations')
         .update({
           current_workout_id: null,
-          status: 'online',
           last_sync: new Date().toISOString(),
         })
         .eq('station_code', stationId);
