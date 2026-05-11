@@ -33,9 +33,10 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const [bufferA, setBufferA] = useState(null);
   const [bufferB, setBufferB] = useState(null);
   const [activeBuffer, setActiveBuffer] = useState('A');
-  const activeBufferRef = useRef('A');
-  const pollingRef = useRef(null);
-  const loadingRef = useRef(false);
+  const activeBufferRef  = useRef('A');
+  const pollingRef       = useRef(null);
+  const loadingRef       = useRef(false);
+  const loadStartRef     = useRef(0);
 
   // State umum
   const [loading, setLoading]             = useState(true);
@@ -185,18 +186,20 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const startSnapshotPolling = (ip, port) => {
     clearInterval(pollingRef.current);
     pollingRef.current = setInterval(() => {
-      if (loadingRef.current) return;
+      const now = Date.now();
+      // Stall protection: kalau load tidak selesai dalam 350ms, paksa reset
+      if (loadingRef.current && (now - loadStartRef.current) < 350) return;
+
       loadingRef.current = true;
+      loadStartRef.current = now;
 
-      const ts = Date.now();
-      const newUri = `http://${ip}:${port}/stream/snapshot?t=${ts}`;
-
+      const newUri = `http://${ip}:${port}/stream/snapshot?t=${now}`;
       if (activeBufferRef.current === 'A') {
         setBufferB(newUri);
       } else {
         setBufferA(newUri);
       }
-    }, 250);
+    }, 100);
   };
 
   const handleBackBufferLoaded = () => {
@@ -433,25 +436,17 @@ export default function LiveWorkoutScreen({ navigation, route }) {
       <View style={styles.streamContainer}>
         {(bufferA || bufferB) ? (
           <View style={styles.stream}>
-            {/* Buffer A */}
             <Image
               source={bufferA ? { uri: bufferA } : undefined}
-              style={[
-                styles.streamImage,
-                { opacity: activeBuffer === 'A' ? 1 : 0 },
-              ]}
+              style={[styles.streamImage, { opacity: activeBuffer === 'A' ? 1 : 0 }]}
               resizeMode="cover"
               fadeDuration={0}
               onLoad={activeBuffer !== 'A' ? handleBackBufferLoaded : undefined}
               onError={activeBuffer !== 'A' ? handleBufferError : undefined}
             />
-            {/* Buffer B */}
             <Image
               source={bufferB ? { uri: bufferB } : undefined}
-              style={[
-                styles.streamImage,
-                { opacity: activeBuffer === 'B' ? 1 : 0 },
-              ]}
+              style={[styles.streamImage, { opacity: activeBuffer === 'B' ? 1 : 0 }]}
               resizeMode="cover"
               fadeDuration={0}
               onLoad={activeBuffer !== 'B' ? handleBackBufferLoaded : undefined}
