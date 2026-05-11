@@ -215,7 +215,11 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     try {
       await supabase
         .from('stations')
-        .update({ current_workout_id: 1 })
+        .update({
+          current_workout_id: workoutId,
+          status: 'busy',
+          last_sync: new Date().toISOString(),
+        })
         .eq('station_code', stationId);
     } catch { /* non-critical */ }
   };
@@ -224,7 +228,11 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     try {
       await supabase
         .from('stations')
-        .update({ current_workout_id: null })
+        .update({
+          current_workout_id: null,
+          status: 'online',
+          last_sync: new Date().toISOString(),
+        })
         .eq('station_code', stationId);
     } catch { /* non-critical */ }
   };
