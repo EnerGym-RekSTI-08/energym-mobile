@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "energym-mobile",
-    "slug": "energym-mobile",
+    "slug": "energym",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,13 +20,20 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.nazwan.energym"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "492a3eca-300f-45c7-ac30-213401d06b96"
+      }
+    },
+    "owner": "nazwan"
   }
 }
