@@ -382,9 +382,9 @@ export default function LiveWorkoutScreen({ navigation, route }) {
 
     addCompletedExercise(exerciseSummary);
 
-    navigation.navigate('WorkoutSummary', {
-      workoutId, workoutName: route.params?.workoutName,
-      summaryData: [exerciseSummary],
+    navigation.navigate('WorkoutDetail', {
+      workoutId,
+      workoutName: route.params?.workoutName,
     });
   };
 

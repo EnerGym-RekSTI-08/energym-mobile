@@ -136,12 +136,17 @@ export default function ExerciseDetailScreen({ route, navigation }) {
             style={styles.startButton}
             onPress={() => {
               const paramsUntukLiveWorkout = {
-                workoutId: workoutId,   
+                workoutId: workoutId,
                 exerciseId: exerciseId,
-                workoutName: workoutName 
+                workoutName: workoutName
               };
-              if (navigation.isAiConnected) {
-                navigation.navigate('LiveWorkout', paramsUntukLiveWorkout);
+              if (navigation.isAiConnected && navigation.connectedStation) {
+                navigation.navigate('LiveWorkout', {
+                  ...paramsUntukLiveWorkout,
+                  aiIp: navigation.connectedStation.ip,
+                  aiPort: navigation.connectedStation.port,
+                  stationId: navigation.connectedStation.stationId,
+                });
               } else {
                 navigation.navigate('scan', { returnTo: 'LiveWorkout', paramsUntukLiveWorkout});
               }

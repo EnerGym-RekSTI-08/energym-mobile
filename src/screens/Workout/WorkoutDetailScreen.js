@@ -78,12 +78,18 @@ export default function WorkoutDetailScreen({ route, navigation }) {
       setTimeout(() => {
         // Gabungkan data target dengan data aktual yang dilakukan user
         const summaryData = exercises.map(ex => {
-          const completedData = completedExercises.find(c => c.exerciseId === ex.id);
+          const completedData = completedExercises.find(c => c.id === ex.id);
           return {
             ...ex,
-            perfectReps: completedData?.perfectCount || 0,
-            badReps: completedData?.badCount || 0,
+            perfectReps: completedData?.perfectReps || 0,
+            badReps: completedData?.badReps || 0,
             duration: completedData?.duration || 0,
+            aiAccuracy: completedData?.aiAccuracy ?? null,
+            bodySway: completedData?.bodySway ?? 0,
+            elbowDrift: completedData?.elbowDrift ?? 0,
+            tooFast: completedData?.tooFast ?? 0,
+            gripRotation: completedData?.gripRotation ?? 0,
+            aiSessionId: completedData?.aiSessionId ?? null,
           };
         });
 
@@ -99,7 +105,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
   // Fungsi cek apakah exercise tertentu sudah ada di keranjang completed
   const isExerciseDone = (id) => {
-    return completedExercises.some(ex => ex.exerciseId === id);
+    return completedExercises.some(ex => ex.id === id);
   };
 
   // 3. LOGIKA TOMBOL BACK (Mencegah user keluar jika ada progress)

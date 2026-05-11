@@ -103,6 +103,14 @@ export default function ScanQRScreen({ navigation, route }) {
   };
 
   const doNavigate = (returnTo, params) => {
+    if (scannedData) {
+      navigation.setIsAiConnected?.(true);
+      navigation.setConnectedStation?.({
+        ip: scannedData.ip,
+        port: scannedData.port,
+        stationId: scannedData.station_id,
+      });
+    }
     if (returnTo) {
       navigation.navigate(returnTo, params);
     } else {

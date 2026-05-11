@@ -29,6 +29,7 @@ function MainApp() {
   const [navigationStack, setNavigationStack] = useState({ home: ['welcome'] });
   
   const [isAiConnected, setIsAiConnected] = useState(false);
+  const [connectedStation, setConnectedStation] = useState(null); // { ip, port, stationId }
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
   // Baca keranjang latihan untuk mengunci Navbar
@@ -95,7 +96,7 @@ function MainApp() {
   const activeScreenName = typeof currentScreen === 'string' ? currentScreen : currentScreen.screen;
   const activeParams = typeof currentScreen === 'string' ? {} : currentScreen.params;
   
-  const navigationObj = { navigate, goBack, isAiConnected, setIsAiConnected };
+  const navigationObj = { navigate, goBack, isAiConnected, setIsAiConnected, connectedStation, setConnectedStation };
 
   // SOLUSI BUG 2: Cegat penekanan Navbar saat Workout sedang berjalan
   const handleTabPress = (targetTabName) => {
@@ -147,6 +148,7 @@ function MainApp() {
 
   const handleDisconnect = () => {
     setIsAiConnected(false);
+    setConnectedStation(null);
     setShowDisconnectModal(false);
   };
 
