@@ -64,6 +64,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const totalPerfectRef      = useRef(0);
   const totalBadRef          = useRef(0);
   const lastRepCountRef      = useRef(0);   // deteksi kapan rep baru selesai
+  const lastBadRepCountRef   = useRef(0);   // deteksi kapan bad rep baru selesai (dari AI)
   const hadBadFormThisRepRef = useRef(false); // apakah ada bad form di rep ini
 
   // State AI
@@ -74,7 +75,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const wsRef          = useRef(null);
   const aiSummaryRef   = useRef(null);
   const stoppedRef     = useRef(false);
-  const formCountsRef  = useRef({ body_sway: 0, elbow_drift: 0, too_fast: 0, grip_rotation: 0 });
+  const formCountsRef  = useRef({ body_sway: 0, elbow_drift: 0, too_fast: 0, grip_rotation: 0, same_side: 0, bilateral_move: 0 });
 
   // Refs untuk akses state terkini di callback
   const targetRepsRef = useRef(0);
@@ -270,7 +271,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
       await new Promise(r => setTimeout(r, 500));
 
       const ws = connectAIWebSocket(aiIp, aiPort, sessionId, {
-        onFrameUpdate: ({ repCount, state, isBadForm, formIssues, activeArm }) => {
+        onFrameUpdate: ({ repCount, badRepCount, state, isBadForm, formIssues, activeArm }) => {
           const repsInSet = repCount - repOffsetRef.current;
 
           if (isRestingRef.current) return;
@@ -279,13 +280,14 @@ export default function LiveWorkoutScreen({ navigation, route }) {
           const armLabel = activeArm && activeArm !== 'none' ? ` (${activeArm})` : '';
           setPoseStatus(`${state}${armLabel} | reps: ${repsInSet}`);
 
-          // Tandai rep ini buruk jika ada frame bad form (per-rep, bukan per-frame)
           if (isBadForm && formIssues.length > 0) {
             const issueMap = {
-              body_sway:     '⚠ Jangan ayun badan!',
-              elbow_drift:   '⚠ Siku jangan maju!',
-              too_fast:      '⚠ Perlambat gerakan!',
-              grip_rotation: '⚠ Jaga posisi grip netral!',
+              body_sway:      '⚠ Jangan ayun badan!',
+              elbow_drift:    '⚠ Posisi siku salah! Jaga di samping badan!',
+              too_fast:       '⚠ Perlambat gerakan!',
+              grip_rotation:  '⚠ Jaga posisi grip netral!',
+              same_side:      '⚠ Ganti tangan! Jangan satu sisi terus!',
+              bilateral_move: '⚠ Angkat bergantian, bukan bersamaan!',
             };
             const code = formIssues[0].split('_').slice(0, 2).join('_');
             if (code in formCountsRef.current) formCountsRef.current[code] += 1;
@@ -295,7 +297,17 @@ export default function LiveWorkoutScreen({ navigation, route }) {
             badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 2500);
           }
 
-          // Klasifikasi rep saat repCount bertambah (1 rep = 1 hitungan, bukan 1 frame)
+          // Bad rep langsung dari AI (too_fast, body_sway saat rep selesai, dll)
+          // badRepCount hanya ada untuk bilateral exercises (bicep/hammer curl)
+          if (badRepCount != null && badRepCount > lastBadRepCountRef.current) {
+            const newBadReps = badRepCount - lastBadRepCountRef.current;
+            totalBadRef.current += newBadReps;
+            setBadCount(totalBadRef.current);
+            lastBadRepCountRef.current = badRepCount;
+            hadBadFormThisRepRef.current = false;
+          }
+
+          // Klasifikasi rep saat repCount (good reps) bertambah
           if (repCount > lastRepCountRef.current) {
             const newReps = repCount - lastRepCountRef.current;
             if (hadBadFormThisRepRef.current) {
@@ -306,7 +318,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
               setPerfectCount(totalPerfectRef.current);
             }
             lastRepCountRef.current = repCount;
-            hadBadFormThisRepRef.current = false; // reset untuk rep berikutnya
+            hadBadFormThisRepRef.current = false;
           }
 
           // Cek apakah set selesai
