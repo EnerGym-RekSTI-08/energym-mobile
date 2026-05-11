@@ -60,9 +60,11 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const [restSeconds, setRestSeconds]     = useState(0);
   const [showSetCompleteModal, setShowSetCompleteModal] = useState(false);
   const [allSetsComplete, setAllSetsComplete] = useState(false);
-  const repOffsetRef = useRef(0);
-  const totalPerfectRef = useRef(0);
-  const totalBadRef = useRef(0);
+  const repOffsetRef         = useRef(0);
+  const totalPerfectRef      = useRef(0);
+  const totalBadRef          = useRef(0);
+  const lastRepCountRef      = useRef(0);   // deteksi kapan rep baru selesai
+  const hadBadFormThisRepRef = useRef(false); // apakah ada bad form di rep ini
 
   // State AI
   const [aiSessionId, setAiSessionId]   = useState(null);
@@ -263,16 +265,15 @@ export default function LiveWorkoutScreen({ navigation, route }) {
 
       const ws = connectAIWebSocket(aiIp, aiPort, sessionId, {
         onFrameUpdate: ({ repCount, state, isBadForm, formIssues, activeArm }) => {
-          // Hitung rep relatif terhadap set saat ini
           const repsInSet = repCount - repOffsetRef.current;
 
-          // Jangan update saat sedang istirahat
           if (isRestingRef.current) return;
 
           setCurrentReps(repsInSet);
           const armLabel = activeArm && activeArm !== 'none' ? ` (${activeArm})` : '';
           setPoseStatus(`${state}${armLabel} | reps: ${repsInSet}`);
 
+          // Tandai rep ini buruk jika ada frame bad form (per-rep, bukan per-frame)
           if (isBadForm && formIssues.length > 0) {
             const issueMap = {
               body_sway:     '⚠ Jangan ayun badan!',
@@ -282,19 +283,24 @@ export default function LiveWorkoutScreen({ navigation, route }) {
             };
             const code = formIssues[0].split('_').slice(0, 2).join('_');
             if (code in formCountsRef.current) formCountsRef.current[code] += 1;
+            hadBadFormThisRepRef.current = true;
             setBadFormMessage(issueMap[code] ?? '⚠ Bad Form!');
-            totalBadRef.current += 1;
-            setBadCount(totalBadRef.current);
             clearTimeout(badFormTimeout.current);
             badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 2500);
-          } else {
-            // Update perfect count (cek apakah rep baru terhitung)
-            const prevPerfect = totalPerfectRef.current;
-            const newPerfect = repCount - totalBadRef.current;
-            if (newPerfect > prevPerfect) {
-              totalPerfectRef.current = newPerfect;
-              setPerfectCount(newPerfect);
+          }
+
+          // Klasifikasi rep saat repCount bertambah (1 rep = 1 hitungan, bukan 1 frame)
+          if (repCount > lastRepCountRef.current) {
+            const newReps = repCount - lastRepCountRef.current;
+            if (hadBadFormThisRepRef.current) {
+              totalBadRef.current += newReps;
+              setBadCount(totalBadRef.current);
+            } else {
+              totalPerfectRef.current += newReps;
+              setPerfectCount(totalPerfectRef.current);
             }
+            lastRepCountRef.current = repCount;
+            hadBadFormThisRepRef.current = false; // reset untuk rep berikutnya
           }
 
           // Cek apakah set selesai
@@ -334,6 +340,9 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     if (stoppedRef.current) return;
     stoppedRef.current = true;
 
+    const wasResting = isRestingRef.current;
+    const finalSets = wasResting ? Math.max(1, currentSet - 1) : currentSet;
+
     setIsActive(false);
     setSessionStarted(false);
     setShowStopModal(false);
@@ -343,21 +352,25 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     clearInterval(pollingRef.current);
     setBufferA(null);
     setBufferB(null);
-    wsRef.current?.close();
 
+    // Stop AI dulu via HTTP, beri waktu session_ended tiba di WebSocket,
+    // baru tutup WebSocket — supaya aiSummaryRef terisi sebelum dibaca
     if (aiSessionId) {
       await stopAISession(aiIp, aiPort, aiSessionId).catch(() => {});
+      await new Promise(r => setTimeout(r, 800));
     }
+    wsRef.current?.close();
     markStationFree();
 
     const s = aiSummaryRef.current;
-    const finalPerfect  = s?.validReps  ?? perfectCount;
-    const finalBad      = s?.badReps    ?? badCount;
+    // Gunakan ref (bukan state) sebagai fallback — ref update sinkron, state tidak
+    const finalPerfect  = s?.validReps  ?? totalPerfectRef.current;
+    const finalBad      = s?.badReps    ?? totalBadRef.current;
     const finalAccuracy = s?.accuracy   ?? null;
     const fc = formCountsRef.current;
 
     const exerciseSummary = {
-      id: exerciseId, name: exerciseName, sets: currentSet,
+      id: exerciseId, name: exerciseName, sets: finalSets,
       perfectReps: finalPerfect, badReps: finalBad, duration: seconds,
       aiSessionId,
       aiAccuracy:       finalAccuracy,
