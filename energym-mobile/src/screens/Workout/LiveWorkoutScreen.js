@@ -41,6 +41,22 @@ export default function LiveWorkoutScreen({ navigation, route }) {
   const [badFormMessage, setBadFormMessage] = useState(null);
   const badFormTimeout = useRef(null);
 
+  const channel = useRef(null);
+  useEffect(() => {
+      // Membuka jalur komunikasi ke Supabase
+      channel.current = supabase.channel('station-alerts');
+      channel.current.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Koneksi IoT Aktif!');
+        }
+      });
+
+      return () => {
+        if (channel.current) {
+          supabase.removeChannel(channel.current);
+        }
+      };
+    }, []);
   // FETCH DATA DARI SUPABASE
   useEffect(() => {
     const fetchExerciseData = async () => {
@@ -106,6 +122,20 @@ export default function LiveWorkoutScreen({ navigation, route }) {
     };
   }, [isActive, isPaused]);
 
+  // Fungsi untuk menembak sinyal ke Supabase Realtime (Broadcast)
+const triggerHardwareAlert = async () => {
+  // Gunakan RPC atau update biasa untuk tambah +1
+  const { data } = await supabase.rpc('increment_bad_reps', { row_id: 1 });
+  
+  // Kalau belum buat RPC, pakai cara manual ini:
+  const { data: currentData } = await supabase.from('device_commands').select('bad_count').eq('id', 1).single();
+  await supabase
+    .from('device_commands')
+    .update({ bad_count: (currentData.bad_count + 1) })
+    .eq('id', 1);
+    
+  console.log("Bad Count di Database bertambah!");
+};
   // LOGIKA PERHITUNGAN REPS & SETS
   const handleAddRep = (isPerfect) => {
     if (!isActive || isPaused) return;
@@ -122,6 +152,7 @@ export default function LiveWorkoutScreen({ navigation, route }) {
       currentBad += 1;
       setBadCount(currentBad);
       setBadFormMessage("Bad Form! Keep elbow still.");
+      triggerHardwareAlert();
       if (badFormTimeout.current) clearTimeout(badFormTimeout.current);
       badFormTimeout.current = setTimeout(() => setBadFormMessage(null), 3000);
     }
